@@ -15,8 +15,8 @@ export default function Home() {
       <footer className="py-8 px-4 border-t border-slate-200">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-silkscreen text-slate-900">Vif</span>
-            <span className="text-slate-400 text-sm">— Vivid screen capture</span>
+            <span className="font-fraunces font-bold text-slate-900">Vif</span>
+            <span className="text-slate-400 text-sm">— Declarative Screen Capture</span>
           </div>
           <div className="flex items-center gap-4">
             <Link

@@ -125,15 +125,15 @@ export default function HeroSection() {
             <span className="font-bold">Vif</span>
             <br />
             <span className="font-normal bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
-              Agent-First Capture
+              Declarative Screen Capture
             </span>
           </h1>
 
           <div className="font-fraunces text-base sm:text-lg md:text-xl mb-4 md:mb-6 max-w-2xl mx-auto leading-relaxed px-4">
             <p className="text-slate-600 font-light">
-              Screen capture built for AI agents and LLMs.
+              Agentic Asset Generation
               <br className="hidden sm:block" />
-              <span className="text-slate-500 italic">Declarative. CLI-native. Everything is a file.</span>
+              <span className="text-slate-500 italic">CLI-native. Everything is a file. Built for AI agents.</span>
             </p>
           </div>
 
