@@ -1,0 +1,37 @@
+{
+  "name": "@arach/vif",
+  "version": "0.1.0",
+  "description": "Vivid screen capture for macOS - screenshots, video, and GIFs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "vif": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node dist/test.js"
+  },
+  "keywords": [
+    "screenshot",
+    "video",
+    "capture",
+    "macos",
+    "automation",
+    "assets"
+  ],
+  "author": "Arach Tehrani",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arach/vif"
+  }
+}
