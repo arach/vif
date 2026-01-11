@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, Silkscreen } from "next/font/google"
+import { Inter, Fraunces } from "next/font/google"
 import "./globals.css"
 
 const inter = Inter({
@@ -23,22 +23,22 @@ const sfProText = Inter({
   display: "swap",
 })
 
-const silkscreen = Silkscreen({
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-silkscreen",
-  weight: ["400"],
+  variable: "--font-fraunces",
+  weight: ["400", "500", "600", "700", "800", "900"],
   display: "swap",
 })
 
 export const metadata: Metadata = {
-  title: "Vif — Vivid Screen Capture for macOS",
-  description: "Screenshots, video recording, and GIF creation for macOS. One CLI to capture it all.",
-  keywords: "screenshot, video, capture, gif, macos, cli, npm, typescript, screen recording",
+  title: "Vif — Agent-First Screen Capture",
+  description: "Screen capture built for AI agents. Declarative storyboards, CLI-native, everything is a file.",
+  keywords: "ai agents, llm, screen capture, declarative, storyboard, yaml, cli, macos, typescript, agentic",
   authors: [{ name: "Vif" }],
   metadataBase: new URL("https://vif.arach.dev"),
   openGraph: {
-    title: "Vif — Vivid Screen Capture for macOS",
-    description: "Screenshots, video recording, and GIF creation for macOS. One CLI to capture it all.",
+    title: "Vif — Agent-First Screen Capture",
+    description: "Screen capture built for AI agents. Declarative storyboards, CLI-native, everything is a file.",
     type: "website",
     url: "https://vif.arach.dev",
     siteName: "Vif",
@@ -47,14 +47,14 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Vif - Vivid screen capture for macOS",
+        alt: "Vif - Agent-first screen capture for macOS",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vif — Vivid Screen Capture for macOS",
-    description: "Screenshots, video recording, and GIF creation for macOS. One CLI to capture it all.",
+    title: "Vif — Agent-First Screen Capture",
+    description: "Screen capture built for AI agents. Declarative storyboards, CLI-native, everything is a file.",
     images: ["/og-image.png"],
   },
   generator: 'Vif'
@@ -66,7 +66,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${sfProDisplay.variable} ${sfProText.variable} ${silkscreen.variable}`}>
+    <html lang="en" className={`${inter.variable} ${sfProDisplay.variable} ${sfProText.variable} ${fraunces.variable}`}>
       <body className="font-text antialiased">{children}</body>
     </html>
   )

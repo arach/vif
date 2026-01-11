@@ -14,7 +14,7 @@ const config: Config = {
         display: ["var(--font-display)"],
         text: ["var(--font-text)"],
         sans: ["var(--font-text)"],
-        silkscreen: ["var(--font-silkscreen)", "monospace"],
+        fraunces: ["var(--font-fraunces)", "Georgia", "serif"],
       },
     },
   },
