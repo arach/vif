@@ -31,14 +31,14 @@ const fraunces = Fraunces({
 })
 
 export const metadata: Metadata = {
-  title: "Vif — Agent-First Screen Capture",
-  description: "Screen capture built for AI agents. Declarative storyboards, CLI-native, everything is a file.",
-  keywords: "ai agents, llm, screen capture, declarative, storyboard, yaml, cli, macos, typescript, agentic",
+  title: "Vif — Declarative Screen Capture",
+  description: "Agentic asset generation. CLI-native screen capture built for AI agents. Everything is a file.",
+  keywords: "ai agents, llm, screen capture, declarative, storyboard, yaml, cli, macos, typescript, agentic, asset generation",
   authors: [{ name: "Vif" }],
   metadataBase: new URL("https://vif.arach.dev"),
   openGraph: {
-    title: "Vif — Agent-First Screen Capture",
-    description: "Screen capture built for AI agents. Declarative storyboards, CLI-native, everything is a file.",
+    title: "Vif — Declarative Screen Capture",
+    description: "Agentic asset generation. CLI-native screen capture built for AI agents. Everything is a file.",
     type: "website",
     url: "https://vif.arach.dev",
     siteName: "Vif",
@@ -47,14 +47,14 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Vif - Agent-first screen capture for macOS",
+        alt: "Vif - Declarative Screen Capture for macOS",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vif — Agent-First Screen Capture",
-    description: "Screen capture built for AI agents. Declarative storyboards, CLI-native, everything is a file.",
+    title: "Vif — Declarative Screen Capture",
+    description: "Agentic asset generation. CLI-native screen capture built for AI agents. Everything is a file.",
     images: ["/og-image.png"],
   },
   generator: 'Vif'

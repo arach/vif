@@ -1,5 +1,6 @@
 import HeroSection from "@/components/hero-section"
 import FeaturesSection from "@/components/features-section"
+import ExamplesSection from "@/components/examples-section"
 import QuickStartSection from "@/components/quick-start-section"
 import { Github } from "lucide-react"
 import Link from "next/link"
@@ -9,6 +10,7 @@ export default function Home() {
     <main className="min-h-screen">
       <HeroSection />
       <FeaturesSection />
+      <ExamplesSection />
       <QuickStartSection />
 
       {/* Footer */}
