@@ -35,12 +35,12 @@ export const metadata: Metadata = {
   description: "Agentic asset generation. CLI-native screen capture built for AI agents. Everything is a file.",
   keywords: "ai agents, llm, screen capture, declarative, storyboard, yaml, cli, macos, typescript, agentic, asset generation",
   authors: [{ name: "Vif" }],
-  metadataBase: new URL("https://vif.arach.dev"),
+  metadataBase: new URL("https://vif.jdi.sh"),
   openGraph: {
     title: "Vif — Declarative Screen Capture",
     description: "Agentic asset generation. CLI-native screen capture built for AI agents. Everything is a file.",
     type: "website",
-    url: "https://vif.arach.dev",
+    url: "https://vif.jdi.sh",
     siteName: "Vif",
     images: [
       {

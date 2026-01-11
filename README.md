@@ -1,14 +1,20 @@
 # Vif
 
-Vivid screen capture for macOS. Screenshots, video, and GIFs.
+**Declarative Screen Capture** — Agentic asset generation for macOS.
+
+![Vif OG](landing/public/og-image.png)
+
+Screen capture built for AI agents and LLMs. Declarative storyboards, CLI-native, everything is a file.
 
 ## Features
 
+- **Agent-First**: Designed for LLM tool use with predictable, parseable output
+- **Declarative Storyboards**: Define video sequences in YAML
 - **Window Discovery**: Find windows by app name with precise window IDs
 - **Screenshot Capture**: Capture windows, regions, or fullscreen
 - **Video Recording**: Record screen with optional audio
 - **Video Processing**: Convert, optimize, and create GIFs (requires ffmpeg)
-- **CLI Tool**: Quick command-line access to all features
+- **Take Management**: Iterate on captures with automatic versioning
 
 ## Installation
 
@@ -20,6 +26,49 @@ Or globally:
 
 ```bash
 pnpm install -g @arach/vif
+```
+
+## Quick Start
+
+```bash
+# Check system capabilities
+vif check
+
+# Screenshot fullscreen
+vif shot screenshot.png
+
+# Screenshot an app window
+vif shot --app Safari safari.png
+
+# Record video (Ctrl+C to stop)
+vif record demo.mp4
+
+# Render a storyboard
+vif render storyboard.yaml
+```
+
+## Storyboards
+
+Define video sequences declaratively in YAML:
+
+```yaml
+name: product-demo
+output: demo.mp4
+audio:
+  file: music.mp3
+  volume: 0.7
+  fadeOut: 2
+sequence:
+  - source: intro.mp4
+    duration: 3
+  - source: features.mp4
+    transition: crossfade
+```
+
+Then render:
+
+```bash
+vif render storyboard.yaml
 ```
 
 ## CLI Usage
@@ -48,6 +97,10 @@ vif gif demo.mp4 demo.gif --width 600 --fps 15
 
 # Optimize video for web
 vif optimize raw.mov web-ready.mp4 --width 1280
+
+# Take management
+vif take screenshot --name hero-shot
+vif take list
 ```
 
 ## Library Usage
@@ -142,6 +195,10 @@ convertVideo({
 - `optimizeForWeb(input, output, maxWidth?)` - Optimize for web delivery
 - `videoToGif(input, output, options?)` - Create GIF from video
 - `hasFFmpeg()` - Check if ffmpeg is available
+
+## Built with Vif
+
+- [Speakeasy](https://speakeasy.arach.dev) - Text-to-speech library landing page
 
 ## License
 
