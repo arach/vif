@@ -5,8 +5,9 @@
 
 import { execSync, spawn, ChildProcess } from 'child_process';
 import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { tmpdir } from 'os';
+import YAML from 'yaml';
 
 // ============================================================================
 // Types
@@ -515,6 +516,674 @@ export function listWindows(): void {
   for (const w of windows) {
     console.log(`[${w.id}] ${w.owner} - "${w.name}" (${w.bounds.width}x${w.bounds.height} at ${w.bounds.x},${w.bounds.y})`);
   }
+}
+
+// ============================================================================
+// Storyboard Types
+// ============================================================================
+
+export interface AudioTrack {
+  /** Path to audio file */
+  track: string;
+  /** Volume (0.0 - 1.0) */
+  volume?: number;
+  /** Fade in duration (seconds) */
+  fadeIn?: number;
+  /** Fade out duration (seconds) */
+  fadeOut?: number;
+  /** Start offset in audio (seconds) */
+  startAt?: number;
+}
+
+export interface ClipTransition {
+  type: 'none' | 'fade' | 'crossfade' | 'dissolve';
+  duration?: number;
+}
+
+export interface StoryboardClip {
+  /** Path to source video/image */
+  source: string;
+  /** Start time in source (seconds) */
+  startTime?: number;
+  /** Duration to use (seconds) */
+  duration?: number;
+  /** Sync to beat number or 'next' */
+  sync?: number | 'beat';
+  /** Transition to next clip */
+  transition?: ClipTransition | string;
+  /** Label for this clip */
+  label?: string;
+}
+
+export interface Storyboard {
+  /** Project name */
+  name: string;
+  /** Output file path */
+  output: string;
+  /** Audio configuration */
+  audio?: AudioTrack;
+  /** Sequence of clips */
+  sequence: StoryboardClip[];
+  /** Default transition between clips */
+  defaultTransition?: ClipTransition | string;
+  /** Target resolution */
+  resolution?: { width: number; height: number };
+  /** Target frame rate */
+  fps?: number;
+}
+
+export interface AudioAnalysis {
+  /** Duration in seconds */
+  duration: number;
+  /** Sample rate */
+  sampleRate: number;
+  /** Channels */
+  channels: number;
+  /** BPM (if detected or specified) */
+  bpm?: number;
+  /** Beat timestamps in seconds */
+  beats?: number[];
+  /** Format */
+  format: string;
+}
+
+export interface TakeMetadata {
+  version: number;
+  file: string;
+  note: string;
+  timestamp: string;
+  parentVersion?: number;
+  pruned?: boolean;
+}
+
+export interface TakeHistory {
+  asset: string;
+  currentVersion: number;
+  takes: TakeMetadata[];
+}
+
+// ============================================================================
+// Audio Analysis
+// ============================================================================
+
+/**
+ * Analyze an audio file
+ * Returns duration, format, and optionally beat timestamps if BPM is provided
+ */
+export function analyzeAudio(input: string, bpm?: number): AudioAnalysis | null {
+  if (!existsSync(input)) {
+    console.error(`File not found: ${input}`);
+    return null;
+  }
+
+  try {
+    // Use ffprobe to get audio info
+    const probeResult = execSync(
+      `ffprobe -v quiet -print_format json -show_format -show_streams "${input}"`,
+      { encoding: 'utf-8', timeout: 30000 }
+    );
+
+    const probe = JSON.parse(probeResult);
+    const audioStream = probe.streams?.find((s: { codec_type: string }) => s.codec_type === 'audio');
+
+    if (!audioStream && !probe.format) {
+      console.error('No audio data found in file');
+      return null;
+    }
+
+    const duration = parseFloat(probe.format?.duration || audioStream?.duration || '0');
+    const sampleRate = parseInt(audioStream?.sample_rate || '44100', 10);
+    const channels = parseInt(audioStream?.channels || '2', 10);
+    const format = probe.format?.format_name || 'unknown';
+
+    const analysis: AudioAnalysis = {
+      duration,
+      sampleRate,
+      channels,
+      format
+    };
+
+    // Calculate beats if BPM provided
+    if (bpm && bpm > 0) {
+      analysis.bpm = bpm;
+      analysis.beats = [];
+      const beatInterval = 60 / bpm;
+      let time = 0;
+      while (time < duration) {
+        analysis.beats.push(Math.round(time * 1000) / 1000); // Round to ms
+        time += beatInterval;
+      }
+    }
+
+    return analysis;
+  } catch (error) {
+    console.error('Audio analysis failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Get beat timestamps for a given BPM and duration
+ */
+export function getBeats(bpm: number, duration: number, offset = 0): number[] {
+  const beats: number[] = [];
+  const beatInterval = 60 / bpm;
+  let time = offset;
+  while (time < duration) {
+    beats.push(Math.round(time * 1000) / 1000);
+    time += beatInterval;
+  }
+  return beats;
+}
+
+// ============================================================================
+// Music Mixing
+// ============================================================================
+
+export interface MixOptions {
+  /** Input video file */
+  video: string;
+  /** Input audio file */
+  audio: string;
+  /** Output file */
+  output: string;
+  /** Audio volume (0.0 - 1.0, default: 1.0) */
+  volume?: number;
+  /** Fade in duration (seconds) */
+  fadeIn?: number;
+  /** Fade out duration (seconds) */
+  fadeOut?: number;
+  /** Replace original audio (default: true) */
+  replace?: boolean;
+  /** Loop audio if shorter than video */
+  loop?: boolean;
+  /** Start position in audio (seconds) */
+  audioStart?: number;
+}
+
+/**
+ * Mix audio track with video
+ */
+export function mixAudio(options: MixOptions): boolean {
+  const {
+    video,
+    audio,
+    output,
+    volume = 1.0,
+    fadeIn = 0,
+    fadeOut = 0,
+    replace = true,
+    loop = false,
+    audioStart = 0
+  } = options;
+
+  if (!hasFFmpeg()) {
+    console.error('ffmpeg not found. Install with: brew install ffmpeg');
+    return false;
+  }
+
+  if (!existsSync(video)) {
+    console.error(`Video file not found: ${video}`);
+    return false;
+  }
+
+  if (!existsSync(audio)) {
+    console.error(`Audio file not found: ${audio}`);
+    return false;
+  }
+
+  // Ensure output directory exists
+  const dir = dirname(output);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  // Build audio filter chain
+  const audioFilters: string[] = [];
+
+  if (audioStart > 0) {
+    audioFilters.push(`atrim=start=${audioStart}`);
+    audioFilters.push('asetpts=PTS-STARTPTS');
+  }
+
+  if (volume !== 1.0) {
+    audioFilters.push(`volume=${volume}`);
+  }
+
+  if (fadeIn > 0) {
+    audioFilters.push(`afade=t=in:st=0:d=${fadeIn}`);
+  }
+
+  // Get video duration for fade out
+  if (fadeOut > 0) {
+    try {
+      const durationStr = execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${video}"`,
+        { encoding: 'utf-8' }
+      ).trim();
+      const duration = parseFloat(durationStr);
+      audioFilters.push(`afade=t=out:st=${duration - fadeOut}:d=${fadeOut}`);
+    } catch {
+      // Ignore fade out if can't get duration
+    }
+  }
+
+  const audioFilterStr = audioFilters.length > 0 ? audioFilters.join(',') : null;
+
+  // Build ffmpeg command
+  const args: string[] = ['-y'];
+
+  // Input files
+  args.push('-i', video);
+
+  if (loop) {
+    args.push('-stream_loop', '-1');
+  }
+  args.push('-i', audio);
+
+  // Mapping
+  args.push('-map', '0:v'); // Video from first input
+
+  if (replace) {
+    // Use only new audio
+    args.push('-map', '1:a');
+  } else {
+    // Mix original and new audio
+    args.push('-filter_complex', `[0:a][1:a]amix=inputs=2:duration=first[aout]`);
+    args.push('-map', '[aout]');
+  }
+
+  // Apply audio filters
+  if (audioFilterStr && replace) {
+    args.push('-af', audioFilterStr);
+  }
+
+  // Output settings
+  args.push('-c:v', 'copy'); // Copy video stream
+  args.push('-c:a', 'aac', '-b:a', '192k');
+  args.push('-shortest'); // End when shortest stream ends
+
+  args.push(output);
+
+  try {
+    execSync(`ffmpeg ${args.map(a => `"${a}"`).join(' ')}`, {
+      stdio: 'pipe',
+      timeout: 300000
+    });
+    return existsSync(output);
+  } catch (error) {
+    console.error('Audio mixing failed:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// Take Management
+// ============================================================================
+
+const TAKES_DIR = '.vif';
+const TAKES_FILE = 'takes.json';
+
+function getTakesPath(assetPath: string): string {
+  const dir = dirname(assetPath);
+  return join(dir, TAKES_DIR, TAKES_FILE);
+}
+
+function loadTakeHistory(assetPath: string): TakeHistory | null {
+  const takesPath = getTakesPath(assetPath);
+  if (!existsSync(takesPath)) {
+    return null;
+  }
+  try {
+    const data = readFileSync(takesPath, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+function saveTakeHistory(assetPath: string, history: TakeHistory): void {
+  const takesPath = getTakesPath(assetPath);
+  const dir = dirname(takesPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(takesPath, JSON.stringify(history, null, 2));
+}
+
+/**
+ * Create a new take of an asset
+ */
+export function createTake(assetPath: string, note = ''): TakeMetadata | null {
+  if (!existsSync(assetPath)) {
+    console.error(`Asset not found: ${assetPath}`);
+    return null;
+  }
+
+  const history = loadTakeHistory(assetPath) || {
+    asset: assetPath,
+    currentVersion: 0,
+    takes: []
+  };
+
+  const newVersion = history.currentVersion + 1;
+  const ext = assetPath.split('.').pop() || '';
+  const baseName = assetPath.replace(`.${ext}`, '');
+  const takeFile = `${baseName}-take-${newVersion}.${ext}`;
+
+  // Copy current file to take file
+  try {
+    execSync(`cp "${assetPath}" "${takeFile}"`);
+  } catch (error) {
+    console.error('Failed to create take:', error);
+    return null;
+  }
+
+  const take: TakeMetadata = {
+    version: newVersion,
+    file: takeFile,
+    note,
+    timestamp: new Date().toISOString(),
+    parentVersion: history.currentVersion > 0 ? history.currentVersion : undefined
+  };
+
+  history.takes.push(take);
+  history.currentVersion = newVersion;
+  saveTakeHistory(assetPath, history);
+
+  return take;
+}
+
+/**
+ * List all takes for an asset
+ */
+export function listTakes(assetPath: string): TakeMetadata[] {
+  const history = loadTakeHistory(assetPath);
+  if (!history) {
+    return [];
+  }
+  return history.takes.filter(t => !t.pruned);
+}
+
+/**
+ * Revert to a specific take
+ */
+export function revertTake(assetPath: string, version: number): boolean {
+  const history = loadTakeHistory(assetPath);
+  if (!history) {
+    console.error('No take history found');
+    return false;
+  }
+
+  const take = history.takes.find(t => t.version === version && !t.pruned);
+  if (!take) {
+    console.error(`Take version ${version} not found`);
+    return false;
+  }
+
+  if (!existsSync(take.file)) {
+    console.error(`Take file not found: ${take.file}`);
+    return false;
+  }
+
+  try {
+    execSync(`cp "${take.file}" "${assetPath}"`);
+    history.currentVersion = version;
+    saveTakeHistory(assetPath, history);
+    return true;
+  } catch (error) {
+    console.error('Failed to revert:', error);
+    return false;
+  }
+}
+
+/**
+ * Prune old takes, keeping only the most recent N
+ */
+export function pruneTakes(assetPath: string, keep: number): number {
+  const history = loadTakeHistory(assetPath);
+  if (!history) {
+    return 0;
+  }
+
+  const activeTakes = history.takes.filter(t => !t.pruned);
+  if (activeTakes.length <= keep) {
+    return 0;
+  }
+
+  // Sort by version descending, mark older ones for pruning
+  const sorted = [...activeTakes].sort((a, b) => b.version - a.version);
+  const toPrune = sorted.slice(keep);
+
+  let pruned = 0;
+  for (const take of toPrune) {
+    const idx = history.takes.findIndex(t => t.version === take.version);
+    if (idx >= 0) {
+      history.takes[idx].pruned = true;
+      // Delete the file
+      if (existsSync(take.file)) {
+        try {
+          unlinkSync(take.file);
+          pruned++;
+        } catch {
+          // Ignore deletion errors
+        }
+      }
+    }
+  }
+
+  saveTakeHistory(assetPath, history);
+  return pruned;
+}
+
+// ============================================================================
+// Storyboard Rendering
+// ============================================================================
+
+/**
+ * Parse a storyboard YAML file
+ */
+export function parseStoryboard(path: string): Storyboard | null {
+  if (!existsSync(path)) {
+    console.error(`Storyboard file not found: ${path}`);
+    return null;
+  }
+
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const storyboard = YAML.parse(content) as Storyboard;
+    return storyboard;
+  } catch (error) {
+    console.error('Failed to parse storyboard:', error);
+    return null;
+  }
+}
+
+/**
+ * Get video duration using ffprobe
+ */
+export function getVideoDuration(path: string): number {
+  try {
+    const result = execSync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${path}"`,
+      { encoding: 'utf-8' }
+    ).trim();
+    return parseFloat(result);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Render a storyboard to video
+ */
+export function renderStoryboard(
+  storyboard: Storyboard,
+  options?: {
+    basePath?: string;
+    bpm?: number;
+    verbose?: boolean;
+  }
+): boolean {
+  const { basePath = '.', bpm, verbose = false } = options || {};
+
+  if (!hasFFmpeg()) {
+    console.error('ffmpeg not found. Install with: brew install ffmpeg');
+    return false;
+  }
+
+  const log = verbose ? console.log : () => {};
+
+  // Resolve paths relative to basePath
+  const resolvePath = (p: string) => resolve(basePath, p);
+  const outputPath = resolvePath(storyboard.output);
+
+  // Ensure output directory exists
+  const outputDir = dirname(outputPath);
+  if (!existsSync(outputDir)) {
+    mkdirSync(outputDir, { recursive: true });
+  }
+
+  // Validate clips exist
+  for (const clip of storyboard.sequence) {
+    const clipPath = resolvePath(clip.source);
+    if (!existsSync(clipPath)) {
+      console.error(`Clip not found: ${clip.source}`);
+      return false;
+    }
+  }
+
+  // Calculate beat timestamps if audio and BPM provided
+  let beats: number[] = [];
+  if (storyboard.audio && bpm) {
+    const audioPath = resolvePath(storyboard.audio.track);
+    const analysis = analyzeAudio(audioPath, bpm);
+    if (analysis?.beats) {
+      beats = analysis.beats;
+      log(`Found ${beats.length} beats at ${bpm} BPM`);
+    }
+  }
+
+  // Temporary directory for intermediate files
+  const tempDir = join(tmpdir(), `vif-render-${Date.now()}`);
+  mkdirSync(tempDir, { recursive: true });
+
+  try {
+    // Step 1: Prepare each clip (trim, normalize)
+    log('Preparing clips...');
+    const preparedClips: string[] = [];
+    let currentBeatIndex = 0;
+
+    for (let i = 0; i < storyboard.sequence.length; i++) {
+      const clip = storyboard.sequence[i];
+      const sourcePath = resolvePath(clip.source);
+      const preparedPath = join(tempDir, `clip-${i}.mp4`);
+
+      const clipArgs: string[] = ['-y', '-i', sourcePath];
+
+      // Handle timing
+      if (clip.startTime !== undefined) {
+        clipArgs.push('-ss', String(clip.startTime));
+      }
+
+      if (clip.duration !== undefined) {
+        clipArgs.push('-t', String(clip.duration));
+      }
+
+      // Normalize resolution and framerate
+      const resolution = storyboard.resolution || { width: 1920, height: 1080 };
+      const fps = storyboard.fps || 30;
+
+      clipArgs.push(
+        '-vf', `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`,
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '18',
+        '-an', // Remove audio for now, we'll add music later
+        preparedPath
+      );
+
+      log(`  Preparing clip ${i + 1}: ${clip.source}`);
+      execSync(`ffmpeg ${clipArgs.map(a => `"${a}"`).join(' ')}`, { stdio: 'pipe' });
+      preparedClips.push(preparedPath);
+
+      // Track beat alignment
+      if (clip.sync === 'beat' && beats.length > currentBeatIndex) {
+        log(`    → Synced to beat ${currentBeatIndex} at ${beats[currentBeatIndex]}s`);
+        currentBeatIndex++;
+      }
+    }
+
+    // Step 2: Concatenate clips
+    log('Concatenating clips...');
+    const concatListPath = join(tempDir, 'concat.txt');
+    const concatContent = preparedClips.map(p => `file '${p}'`).join('\n');
+    writeFileSync(concatListPath, concatContent);
+
+    const concatenatedPath = join(tempDir, 'concatenated.mp4');
+    execSync(
+      `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${concatenatedPath}"`,
+      { stdio: 'pipe' }
+    );
+
+    // Step 3: Add audio if specified
+    if (storyboard.audio) {
+      log('Adding audio...');
+      const audioPath = resolvePath(storyboard.audio.track);
+
+      const success = mixAudio({
+        video: concatenatedPath,
+        audio: audioPath,
+        output: outputPath,
+        volume: storyboard.audio.volume,
+        fadeIn: storyboard.audio.fadeIn,
+        fadeOut: storyboard.audio.fadeOut,
+        audioStart: storyboard.audio.startAt,
+        replace: true,
+        loop: true
+      });
+
+      if (!success) {
+        console.error('Failed to add audio');
+        return false;
+      }
+    } else {
+      // No audio, just copy the concatenated file
+      execSync(`cp "${concatenatedPath}" "${outputPath}"`);
+    }
+
+    log(`\nRendered: ${outputPath}`);
+    return existsSync(outputPath);
+
+  } catch (error) {
+    console.error('Render failed:', error);
+    return false;
+  } finally {
+    // Clean up temp directory
+    try {
+      execSync(`rm -rf "${tempDir}"`);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+/**
+ * Render a storyboard from a YAML file
+ */
+export function renderStoryboardFile(
+  path: string,
+  options?: { bpm?: number; verbose?: boolean }
+): boolean {
+  const storyboard = parseStoryboard(path);
+  if (!storyboard) {
+    return false;
+  }
+
+  return renderStoryboard(storyboard, {
+    basePath: dirname(path),
+    ...options
+  });
 }
 
 // Export types

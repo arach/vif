@@ -150,5 +150,153 @@ export declare function quickShot(prefix?: string): string;
  * List all app windows (useful for debugging)
  */
 export declare function listWindows(): void;
+export interface AudioTrack {
+    /** Path to audio file */
+    track: string;
+    /** Volume (0.0 - 1.0) */
+    volume?: number;
+    /** Fade in duration (seconds) */
+    fadeIn?: number;
+    /** Fade out duration (seconds) */
+    fadeOut?: number;
+    /** Start offset in audio (seconds) */
+    startAt?: number;
+}
+export interface ClipTransition {
+    type: 'none' | 'fade' | 'crossfade' | 'dissolve';
+    duration?: number;
+}
+export interface StoryboardClip {
+    /** Path to source video/image */
+    source: string;
+    /** Start time in source (seconds) */
+    startTime?: number;
+    /** Duration to use (seconds) */
+    duration?: number;
+    /** Sync to beat number or 'next' */
+    sync?: number | 'beat';
+    /** Transition to next clip */
+    transition?: ClipTransition | string;
+    /** Label for this clip */
+    label?: string;
+}
+export interface Storyboard {
+    /** Project name */
+    name: string;
+    /** Output file path */
+    output: string;
+    /** Audio configuration */
+    audio?: AudioTrack;
+    /** Sequence of clips */
+    sequence: StoryboardClip[];
+    /** Default transition between clips */
+    defaultTransition?: ClipTransition | string;
+    /** Target resolution */
+    resolution?: {
+        width: number;
+        height: number;
+    };
+    /** Target frame rate */
+    fps?: number;
+}
+export interface AudioAnalysis {
+    /** Duration in seconds */
+    duration: number;
+    /** Sample rate */
+    sampleRate: number;
+    /** Channels */
+    channels: number;
+    /** BPM (if detected or specified) */
+    bpm?: number;
+    /** Beat timestamps in seconds */
+    beats?: number[];
+    /** Format */
+    format: string;
+}
+export interface TakeMetadata {
+    version: number;
+    file: string;
+    note: string;
+    timestamp: string;
+    parentVersion?: number;
+    pruned?: boolean;
+}
+export interface TakeHistory {
+    asset: string;
+    currentVersion: number;
+    takes: TakeMetadata[];
+}
+/**
+ * Analyze an audio file
+ * Returns duration, format, and optionally beat timestamps if BPM is provided
+ */
+export declare function analyzeAudio(input: string, bpm?: number): AudioAnalysis | null;
+/**
+ * Get beat timestamps for a given BPM and duration
+ */
+export declare function getBeats(bpm: number, duration: number, offset?: number): number[];
+export interface MixOptions {
+    /** Input video file */
+    video: string;
+    /** Input audio file */
+    audio: string;
+    /** Output file */
+    output: string;
+    /** Audio volume (0.0 - 1.0, default: 1.0) */
+    volume?: number;
+    /** Fade in duration (seconds) */
+    fadeIn?: number;
+    /** Fade out duration (seconds) */
+    fadeOut?: number;
+    /** Replace original audio (default: true) */
+    replace?: boolean;
+    /** Loop audio if shorter than video */
+    loop?: boolean;
+    /** Start position in audio (seconds) */
+    audioStart?: number;
+}
+/**
+ * Mix audio track with video
+ */
+export declare function mixAudio(options: MixOptions): boolean;
+/**
+ * Create a new take of an asset
+ */
+export declare function createTake(assetPath: string, note?: string): TakeMetadata | null;
+/**
+ * List all takes for an asset
+ */
+export declare function listTakes(assetPath: string): TakeMetadata[];
+/**
+ * Revert to a specific take
+ */
+export declare function revertTake(assetPath: string, version: number): boolean;
+/**
+ * Prune old takes, keeping only the most recent N
+ */
+export declare function pruneTakes(assetPath: string, keep: number): number;
+/**
+ * Parse a storyboard YAML file
+ */
+export declare function parseStoryboard(path: string): Storyboard | null;
+/**
+ * Get video duration using ffprobe
+ */
+export declare function getVideoDuration(path: string): number;
+/**
+ * Render a storyboard to video
+ */
+export declare function renderStoryboard(storyboard: Storyboard, options?: {
+    basePath?: string;
+    bpm?: number;
+    verbose?: boolean;
+}): boolean;
+/**
+ * Render a storyboard from a YAML file
+ */
+export declare function renderStoryboardFile(path: string, options?: {
+    bpm?: number;
+    verbose?: boolean;
+}): boolean;
 export type { ChildProcess };
 //# sourceMappingURL=index.d.ts.map

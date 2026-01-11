@@ -2,7 +2,7 @@
 /**
  * Vif CLI - Vivid screen capture for macOS
  */
-import { screenshot, screenshotApp, screenshotFullscreen, startRecording, recordVideo, convertVideo, optimizeForWeb, videoToGif, activateApp, listWindows, hasFFmpeg } from './index.js';
+import { screenshot, screenshotApp, screenshotFullscreen, startRecording, recordVideo, convertVideo, optimizeForWeb, videoToGif, activateApp, listWindows, hasFFmpeg, analyzeAudio, mixAudio, createTake, listTakes, revertTake, pruneTakes, renderStoryboardFile } from './index.js';
 const args = process.argv.slice(2);
 const command = args[0];
 function printHelp() {
@@ -11,46 +11,61 @@ Vif - Vivid screen capture for macOS
 
 Usage: vif <command> [options]
 
-Commands:
+Capture Commands:
   windows                      List all visible windows
   shot <output.png>            Take a fullscreen screenshot
-  shot --app <name> <output>   Take a screenshot of an app window
-  shot --window <id> <output>  Take a screenshot of a window by ID
+  shot --app <name> <output>   Screenshot an app window
   record <output.mp4>          Start video recording (Ctrl+C to stop)
   record --duration <s> <out>  Record for specific duration
+
+Processing Commands:
   convert <input> <output>     Convert/process video
-  gif <input.mp4> <output.gif> Convert video to GIF
+  gif <input> <output.gif>     Convert video to GIF
   optimize <input> <output>    Optimize video for web
+  mix <video> <audio> <out>    Add audio track to video
+
+Storyboard Commands:
+  render <storyboard.yaml>     Render a storyboard to video
+  analyze <audio>              Analyze audio file (duration, beats)
+
+Take Management:
+  take new <asset> [note]      Create a new take/version
+  take list <asset>            List all takes for an asset
+  take revert <asset> <ver>    Revert to a specific take
+  take prune <asset> --keep N  Keep only last N takes
 
 Options:
   --app <name>       Target app by name
   --window <id>      Target window by ID
-  --duration <sec>   Recording duration
-  --width <px>       Target width for conversion
-  --scale <factor>   Scale factor (e.g., 0.5)
-  --fps <n>          Frame rate for GIF
-  --no-shadow        Remove window shadow (default)
-  --delay <sec>      Delay before capture
+  --duration <sec>   Recording/clip duration
+  --width <px>       Target width
+  --fps <n>          Frame rate
+  --bpm <n>          Beats per minute (for audio sync)
+  --volume <0-1>     Audio volume
+  --fade-in <sec>    Audio fade in
+  --fade-out <sec>   Audio fade out
+  --verbose, -v      Verbose output
+  --keep <n>         Number of takes to keep
 
 Examples:
-  vif windows
-  vif shot screenshot.png
   vif shot --app Safari safari.png
-  vif record demo.mp4
   vif record --duration 10 demo.mp4
-  vif gif demo.mp4 demo.gif --width 600 --fps 15
-  vif optimize raw.mov web-ready.mp4 --width 1280
+  vif mix demo.mp4 music.mp3 final.mp4 --volume 0.7 --fade-out 2
+  vif render storyboard.yaml --bpm 120 --verbose
+  vif take new demo.mp4 "shortened intro"
+  vif analyze music.mp3 --bpm 128
 `);
 }
 function parseArgs(args) {
     const result = {};
+    const positionals = [];
     let i = 0;
     while (i < args.length) {
         const arg = args[i];
         if (arg.startsWith('--')) {
             const key = arg.slice(2);
             const nextArg = args[i + 1];
-            if (nextArg && !nextArg.startsWith('--')) {
+            if (nextArg && !nextArg.startsWith('--') && !nextArg.startsWith('-')) {
                 result[key] = nextArg;
                 i += 2;
             }
@@ -59,16 +74,24 @@ function parseArgs(args) {
                 i += 1;
             }
         }
+        else if (arg === '-v') {
+            result['verbose'] = true;
+            i += 1;
+        }
         else {
-            if (!result._positional) {
-                result._positional = arg;
-            }
-            else if (!result._positional2) {
-                result._positional2 = arg;
-            }
+            positionals.push(arg);
             i += 1;
         }
     }
+    // Assign positionals
+    if (positionals[0])
+        result._positional = positionals[0];
+    if (positionals[1])
+        result._positional2 = positionals[1];
+    if (positionals[2])
+        result._positional3 = positionals[2];
+    if (positionals[3])
+        result._positional4 = positionals[3];
     return result;
 }
 async function main() {
@@ -166,7 +189,6 @@ async function main() {
                         process.exit(1);
                     }
                 });
-                // Keep process alive
                 await new Promise(() => { });
             }
             break;
@@ -219,7 +241,7 @@ async function main() {
             const input = opts._positional;
             const output = opts._positional2;
             if (!input || !output) {
-                console.error('Usage: vif gif <input.mp4> <output.gif>');
+                console.error('Usage: vif gif <input> <output.gif>');
                 process.exit(1);
             }
             console.log(`Converting ${input} to GIF...`);
@@ -233,6 +255,161 @@ async function main() {
             else {
                 console.error('GIF conversion failed');
                 process.exit(1);
+            }
+            break;
+        }
+        case 'mix': {
+            const video = opts._positional;
+            const audio = opts._positional2;
+            const output = opts._positional3;
+            if (!video || !audio || !output) {
+                console.error('Usage: vif mix <video> <audio> <output>');
+                process.exit(1);
+            }
+            console.log(`Mixing ${audio} into ${video}...`);
+            const success = mixAudio({
+                video,
+                audio,
+                output,
+                volume: opts.volume ? parseFloat(opts.volume) : 1.0,
+                fadeIn: opts['fade-in'] ? parseFloat(opts['fade-in']) : 0,
+                fadeOut: opts['fade-out'] ? parseFloat(opts['fade-out']) : 0,
+                loop: opts.loop === true
+            });
+            if (success) {
+                console.log(`Mixed: ${output}`);
+            }
+            else {
+                console.error('Mixing failed');
+                process.exit(1);
+            }
+            break;
+        }
+        case 'analyze': {
+            const input = opts._positional;
+            if (!input) {
+                console.error('Usage: vif analyze <audio-file> [--bpm N]');
+                process.exit(1);
+            }
+            const bpm = opts.bpm ? parseInt(opts.bpm, 10) : undefined;
+            const analysis = analyzeAudio(input, bpm);
+            if (analysis) {
+                console.log(`\nAudio Analysis: ${input}`);
+                console.log('─'.repeat(40));
+                console.log(`  Duration: ${analysis.duration.toFixed(2)}s`);
+                console.log(`  Format: ${analysis.format}`);
+                console.log(`  Sample Rate: ${analysis.sampleRate}Hz`);
+                console.log(`  Channels: ${analysis.channels}`);
+                if (analysis.bpm && analysis.beats) {
+                    console.log(`  BPM: ${analysis.bpm}`);
+                    console.log(`  Total Beats: ${analysis.beats.length}`);
+                    console.log(`  First 10 beats: ${analysis.beats.slice(0, 10).map(b => b.toFixed(2)).join('s, ')}s`);
+                }
+                // Output JSON for piping
+                if (opts.json) {
+                    console.log('\nJSON:');
+                    console.log(JSON.stringify(analysis, null, 2));
+                }
+            }
+            else {
+                console.error('Analysis failed');
+                process.exit(1);
+            }
+            break;
+        }
+        case 'render': {
+            const storyboardPath = opts._positional;
+            if (!storyboardPath) {
+                console.error('Usage: vif render <storyboard.yaml> [--bpm N] [--verbose]');
+                process.exit(1);
+            }
+            const bpm = opts.bpm ? parseInt(opts.bpm, 10) : undefined;
+            const verbose = opts.verbose === true;
+            console.log(`Rendering storyboard: ${storyboardPath}`);
+            const success = renderStoryboardFile(storyboardPath, { bpm, verbose });
+            if (success) {
+                console.log('Render complete!');
+            }
+            else {
+                console.error('Render failed');
+                process.exit(1);
+            }
+            break;
+        }
+        case 'take': {
+            const subcommand = opts._positional;
+            switch (subcommand) {
+                case 'new': {
+                    const asset = opts._positional2;
+                    const note = opts._positional3 || '';
+                    if (!asset) {
+                        console.error('Usage: vif take new <asset> [note]');
+                        process.exit(1);
+                    }
+                    const take = createTake(asset, note);
+                    if (take) {
+                        console.log(`Created take ${take.version}: ${take.file}`);
+                        if (note)
+                            console.log(`  Note: ${note}`);
+                    }
+                    else {
+                        console.error('Failed to create take');
+                        process.exit(1);
+                    }
+                    break;
+                }
+                case 'list': {
+                    const asset = opts._positional2;
+                    if (!asset) {
+                        console.error('Usage: vif take list <asset>');
+                        process.exit(1);
+                    }
+                    const takes = listTakes(asset);
+                    if (takes.length === 0) {
+                        console.log('No takes found for this asset');
+                    }
+                    else {
+                        console.log(`\nTakes for ${asset}:`);
+                        console.log('─'.repeat(50));
+                        for (const take of takes) {
+                            const date = new Date(take.timestamp).toLocaleString();
+                            console.log(`  v${take.version}: ${take.file}`);
+                            console.log(`         ${date}${take.note ? ` - "${take.note}"` : ''}`);
+                        }
+                    }
+                    break;
+                }
+                case 'revert': {
+                    const asset = opts._positional2;
+                    const version = opts._positional3 ? parseInt(opts._positional3, 10) : NaN;
+                    if (!asset || isNaN(version)) {
+                        console.error('Usage: vif take revert <asset> <version>');
+                        process.exit(1);
+                    }
+                    const success = revertTake(asset, version);
+                    if (success) {
+                        console.log(`Reverted ${asset} to version ${version}`);
+                    }
+                    else {
+                        console.error('Failed to revert');
+                        process.exit(1);
+                    }
+                    break;
+                }
+                case 'prune': {
+                    const asset = opts._positional2;
+                    const keep = opts.keep ? parseInt(opts.keep, 10) : 5;
+                    if (!asset) {
+                        console.error('Usage: vif take prune <asset> --keep N');
+                        process.exit(1);
+                    }
+                    const pruned = pruneTakes(asset, keep);
+                    console.log(`Pruned ${pruned} old takes, keeping last ${keep}`);
+                    break;
+                }
+                default:
+                    console.error('Usage: vif take <new|list|revert|prune> ...');
+                    process.exit(1);
             }
             break;
         }
