@@ -1,6 +1,6 @@
 {
   "name": "@arach/vif",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Declarative screen capture for macOS - agentic asset generation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
