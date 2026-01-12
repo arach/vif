@@ -6,7 +6,13 @@
  *   {"action": "hide"}
  *   {"action": "moveTo", "x": 500, "y": 300, "duration": 0.3}
  *   {"action": "click"}
+ *   {"action": "doubleClick"}
+ *   {"action": "rightClick"}
+ *   {"action": "dragStart"}
+ *   {"action": "dragEnd"}
  *   {"action": "quit"}
+ *
+ * Drag workflow: dragStart -> moveTo (multiple) -> dragEnd
  */
 
 import Cocoa
@@ -17,6 +23,7 @@ import Foundation
 class CursorView: NSView {
     var ripplePhase: CGFloat = 0
     var showRipple = false
+    var isDragging = false
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -37,6 +44,19 @@ class CursorView: NSView {
             let alpha = 0.5 * (1.0 - ripplePhase)
             ctx.setFillColor(NSColor.systemBlue.withAlphaComponent(alpha).cgColor)
             ctx.fillEllipse(in: rippleRect)
+        }
+
+        // Draw drag indicator (pulsing glow)
+        if isDragging {
+            let glowSize: CGFloat = 30
+            let glowRect = CGRect(
+                x: bounds.midX - glowSize/2,
+                y: bounds.midY - glowSize/2 + 16,
+                width: glowSize,
+                height: glowSize
+            )
+            ctx.setFillColor(NSColor.systemOrange.withAlphaComponent(0.4).cgColor)
+            ctx.fillEllipse(in: glowRect)
         }
 
         // Draw cursor at center-top (tip points up in flipped coords)
@@ -105,6 +125,7 @@ class CursorView: NSView {
 class OverlayWindow: NSWindow {
     let cursorView = CursorView()
     var logicalPosition: CGPoint = CGPoint(x: 400, y: 400)
+    var isDragging = false
 
     init() {
         super.init(
@@ -129,6 +150,7 @@ class OverlayWindow: NSWindow {
     func moveTo(x: CGFloat, y: CGFloat, duration: Double) {
         guard let screen = NSScreen.main else { return }
 
+        let oldPosition = logicalPosition
         logicalPosition = CGPoint(x: x, y: y)
 
         // Convert: input is top-left origin, Cocoa is bottom-left
@@ -136,6 +158,19 @@ class OverlayWindow: NSWindow {
         let origin = CGPoint(x: x - 40, y: cocoaY)
 
         if duration > 0 {
+            // If dragging, post drag events during animation
+            if isDragging {
+                let steps = Int(duration * 60) // 60fps
+                for i in 0...steps {
+                    let t = Double(i) / Double(steps)
+                    let interpX = oldPosition.x + (x - oldPosition.x) * t
+                    let interpY = oldPosition.y + (y - oldPosition.y) * t
+                    DispatchQueue.main.asyncAfter(deadline: .now() + duration * t) {
+                        self.postDragEvent(at: CGPoint(x: interpX, y: interpY))
+                    }
+                }
+            }
+
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = duration
                 ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
@@ -143,7 +178,95 @@ class OverlayWindow: NSWindow {
             }
         } else {
             setFrameOrigin(origin)
+            if isDragging {
+                postDragEvent(at: logicalPosition)
+            }
         }
+    }
+
+    func postDragEvent(at point: CGPoint) {
+        if let drag = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: point, mouseButton: .left) {
+            drag.post(tap: .cghidEventTap)
+        }
+    }
+
+    func dragStart() {
+        isDragging = true
+        cursorView.isDragging = true
+        cursorView.needsDisplay = true
+
+        // Post mouse down
+        let point = logicalPosition
+        if let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left) {
+            down.post(tap: .cghidEventTap)
+        }
+
+        NSLog("vif-cursor: drag start at (\(Int(point.x)), \(Int(point.y)))")
+    }
+
+    func dragEnd() {
+        isDragging = false
+        cursorView.isDragging = false
+        cursorView.needsDisplay = true
+
+        // Post mouse up
+        let point = logicalPosition
+        if let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) {
+            up.post(tap: .cghidEventTap)
+        }
+
+        NSLog("vif-cursor: drag end at (\(Int(point.x)), \(Int(point.y)))")
+    }
+
+    func doubleClick() {
+        cursorView.animateClick()
+        let point = logicalPosition
+
+        DispatchQueue.global().async {
+            for clickNum in 1...2 {
+                if let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left) {
+                    down.setIntegerValueField(.mouseEventClickState, value: Int64(clickNum))
+                    down.post(tap: .cghidEventTap)
+                }
+                usleep(30000)
+                if let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) {
+                    up.setIntegerValueField(.mouseEventClickState, value: Int64(clickNum))
+                    up.post(tap: .cghidEventTap)
+                }
+                usleep(30000)
+            }
+        }
+
+        NSLog("vif-cursor: double-click at (\(Int(point.x)), \(Int(point.y)))")
+    }
+
+    func rightClick() {
+        // Orange ripple for right-click
+        cursorView.showRipple = true
+        cursorView.ripplePhase = 0.1
+        for i in 1...15 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.025) {
+                self.cursorView.ripplePhase = CGFloat(i) / 15.0
+                self.cursorView.needsDisplay = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.cursorView.showRipple = false
+            self.cursorView.needsDisplay = true
+        }
+
+        let point = logicalPosition
+        DispatchQueue.global().async {
+            if let down = CGEvent(mouseEventSource: nil, mouseType: .rightMouseDown, mouseCursorPosition: point, mouseButton: .right) {
+                down.post(tap: .cghidEventTap)
+            }
+            usleep(50000)
+            if let up = CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp, mouseCursorPosition: point, mouseButton: .right) {
+                up.post(tap: .cghidEventTap)
+            }
+        }
+
+        NSLog("vif-cursor: right-click at (\(Int(point.x)), \(Int(point.y)))")
     }
 
     func click() {
@@ -213,6 +336,22 @@ class Commander {
 
         case "click":
             window.click()
+            respond(["ok": true])
+
+        case "doubleClick":
+            window.doubleClick()
+            respond(["ok": true])
+
+        case "rightClick":
+            window.rightClick()
+            respond(["ok": true])
+
+        case "dragStart":
+            window.dragStart()
+            respond(["ok": true])
+
+        case "dragEnd":
+            window.dragEnd()
             respond(["ok": true])
 
         case "quit":
