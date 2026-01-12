@@ -35,6 +35,7 @@ import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.j
 import { printCacheInfo, clearCache, getCacheStats } from './cache.js';
 import { startCursorTracking, saveCursorTrack, applyCursorZoomPan, CURSOR_COLORS } from './cursor.js';
 import { executeDemo, saveDemoRecording, hasCursorControl, DemoScript, DemoAction, toCursorTrack } from './automation.js';
+import { startServer } from './server.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -80,6 +81,10 @@ Audio Commands:
 Cache Commands:
   cache                        Show cache info
   cache clear                  Clear the asset cache
+
+Server Commands:
+  serve                        Start automation server (ws://localhost:7850)
+  serve --port <n>             Start on custom port
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -843,6 +848,46 @@ async function main() {
         console.log(`Narration saved: ${output}`);
       } else {
         console.error('Narration failed');
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'serve': {
+      const port = opts.port ? parseInt(opts.port as string, 10) : 7850;
+      const verbose = opts.verbose === true || opts.v === true;
+
+      console.log('vif automation server');
+      console.log('=====================');
+      console.log(`Protocol: WebSocket JSON-RPC`);
+      console.log(`Endpoint: ws://localhost:${port}`);
+      console.log('');
+
+      try {
+        const server = await startServer({ port, verbose: true });
+
+        console.log('Ready for connections.');
+        console.log('');
+        console.log('Commands:');
+        console.log('  {"action": "move", "x": 500, "y": 300, "duration": 0.3}');
+        console.log('  {"action": "click", "x": 500, "y": 300}');
+        console.log('  {"action": "click"}  // at current position');
+        console.log('  {"action": "type", "text": "hello"}');
+        console.log('  {"action": "key", "key": "enter", "modifiers": ["cmd"]}');
+        console.log('  {"action": "position"}  // get cursor position');
+        console.log('');
+        console.log('Press Ctrl+C to stop.\n');
+
+        // Keep running until interrupted
+        process.on('SIGINT', async () => {
+          console.log('\nShutting down...');
+          await server.stop();
+          process.exit(0);
+        });
+
+        await new Promise(() => {}); // Keep alive
+      } catch (err) {
+        console.error('Failed to start server:', err);
         process.exit(1);
       }
       break;

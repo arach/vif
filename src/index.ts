@@ -1209,5 +1209,8 @@ export * from './viewport.js';
 // Export automation (cursor control)
 export * from './automation.js';
 
+// Export server
+export * from './server.js';
+
 // Export types
 export type { ChildProcess };

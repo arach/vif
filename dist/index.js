@@ -873,4 +873,6 @@ export * from './cursor.js';
 export * from './viewport.js';
 // Export automation (cursor control)
 export * from './automation.js';
+// Export server
+export * from './server.js';
 //# sourceMappingURL=index.js.map
