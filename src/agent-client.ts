@@ -114,7 +114,7 @@ export class VifAgent extends EventEmitter {
         if (!this.ready) {
           reject(new Error('Agent startup timeout'));
         }
-      }, 5000);
+      }, 10000);
     });
   }
 
@@ -205,6 +205,38 @@ export class VifAgent extends EventEmitter {
 
   async typerHide(): Promise<void> {
     await this.send({ action: 'typer.hide' });
+  }
+
+  // ─── Viewport Commands ────────────────────────────────────────────
+
+  async viewportSet(x: number, y: number, width: number, height: number): Promise<void> {
+    await this.send({ action: 'viewport.set', x, y, width, height });
+  }
+
+  async viewportSetApp(appName: string): Promise<void> {
+    await this.send({ action: 'viewport.set', app: appName });
+  }
+
+  async viewportShow(): Promise<void> {
+    await this.send({ action: 'viewport.show' });
+  }
+
+  async viewportHide(): Promise<void> {
+    await this.send({ action: 'viewport.hide' });
+  }
+
+  // ─── Recording Commands ───────────────────────────────────────────
+
+  async recordStart(mode: 'draft' | 'final' = 'draft', name?: string): Promise<AgentResponse> {
+    return await this.send({ action: 'record.start', mode, name });
+  }
+
+  async recordStop(): Promise<AgentResponse> {
+    return await this.send({ action: 'record.stop' });
+  }
+
+  async recordStatus(): Promise<AgentResponse> {
+    return await this.send({ action: 'record.status' });
   }
 }
 

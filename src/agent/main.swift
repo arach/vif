@@ -1,7 +1,7 @@
 /**
  * vif-agent: Unified automation overlay for demo recording
  *
- * Combines cursor, keyboard, and typing overlays in one process.
+ * Combines cursor, keyboard, typing overlays, and screen recording in one process.
  * Requests accessibility permissions on launch.
  *
  * Commands (JSON via stdin):
@@ -25,6 +25,19 @@
  *   {"action": "typer.type", "text": "hello world", "style": "terminal"}
  *   {"action": "typer.clear"}
  *   {"action": "typer.hide"}
+ *
+ *   // Viewport
+ *   {"action": "viewport.set", "x": 100, "y": 100, "width": 1280, "height": 720}
+ *   {"action": "viewport.set", "app": "Talkie"}
+ *   {"action": "viewport.show"}
+ *   {"action": "viewport.hide"}
+ *
+ *   // Recording
+ *   {"action": "record.start"}                         // draft mode (default)
+ *   {"action": "record.start", "mode": "final"}        // final mode
+ *   {"action": "record.start", "mode": "final", "name": "feature-demo"}
+ *   {"action": "record.stop"}
+ *   {"action": "record.status"}
  *
  *   // System
  *   {"action": "quit"}
@@ -309,12 +322,13 @@ class CursorWindow: NSWindow {
     let cursorView = CursorView()
     var logicalPosition: CGPoint = CGPoint(x: 400, y: 400)
     var isDragging = false
+    var originalMousePosition: CGPoint?  // Store real cursor position on show
 
     init() {
         super.init(contentRect: NSRect(x: 400, y: 400, width: 80, height: 80), styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        level = .floating
+        level = .popUpMenu  // Higher than .floating to ensure visibility
         ignoresMouseEvents = true
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -324,29 +338,39 @@ class CursorWindow: NSWindow {
     }
 
     func moveTo(x: CGFloat, y: CGFloat, duration: Double) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = NSScreen.main else {
+            fputs("cursor: no screen\\n", stderr)
+            return
+        }
         let oldPos = logicalPosition
         logicalPosition = CGPoint(x: x, y: y)
         let cocoaY = screen.frame.height - y - 40
         let origin = CGPoint(x: x - 40, y: cocoaY)
 
-        if duration > 0 && isDragging {
-            let steps = Int(duration * 60)
-            for i in 0...steps {
-                let t = Double(i) / Double(steps)
-                let ix = oldPos.x + (x - oldPos.x) * t
-                let iy = oldPos.y + (y - oldPos.y) * t
-                DispatchQueue.main.asyncAfter(deadline: .now() + duration * t) {
-                    self.postDrag(at: CGPoint(x: ix, y: iy))
-                }
-            }
-        }
+        // Debug output
+        fputs("cursor: moveTo vif=(\(Int(x)),\(Int(y))) → cocoa=(\(Int(origin.x)),\(Int(origin.y))) screen=\(Int(screen.frame.height))\n", stderr)
 
         if duration > 0 {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = duration
-                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
-                self.animator().setFrameOrigin(origin)
+            // Use timer-based animation for reliable cursor movement
+            let startOrigin = frame.origin
+            let steps = max(Int(duration * 60), 1)
+            let stepDuration = duration / Double(steps)
+
+            for i in 0...steps {
+                let t = Double(i) / Double(steps)
+                // Ease-out cubic for smooth deceleration
+                let eased = 1.0 - pow(1.0 - t, 3)
+                let newX = startOrigin.x + (origin.x - startOrigin.x) * eased
+                let newY = startOrigin.y + (origin.y - startOrigin.y) * eased
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i)) {
+                    self.setFrameOrigin(CGPoint(x: newX, y: newY))
+                    if self.isDragging {
+                        let ix = oldPos.x + (x - oldPos.x) * eased
+                        let iy = oldPos.y + (y - oldPos.y) * eased
+                        self.postDrag(at: CGPoint(x: ix, y: iy))
+                    }
+                }
             }
         } else {
             setFrameOrigin(origin)
@@ -410,6 +434,8 @@ class CursorWindow: NSWindow {
     }
 
     func showCursor() {
+        // Store the current mouse position so we can restore it later
+        originalMousePosition = NSEvent.mouseLocation
         orderFrontRegardless()
         NSCursor.hide()
     }
@@ -417,6 +443,14 @@ class CursorWindow: NSWindow {
     func hideCursor() {
         orderOut(nil)
         NSCursor.unhide()
+
+        // Restore mouse to original position
+        if let original = originalMousePosition, let screen = NSScreen.main {
+            // Convert from Cocoa (bottom-left) to CG (top-left)
+            let cgY = screen.frame.height - original.y
+            CGWarpMouseCursorPosition(CGPoint(x: original.x, y: cgY))
+            originalMousePosition = nil
+        }
     }
 }
 
@@ -542,19 +576,410 @@ class TyperWindow: NSWindow {
     }
 }
 
+// MARK: - Viewport Mask Window
+
+class ViewportMaskWindow: NSWindow {
+    let maskView: ViewportMaskView
+
+    init() {
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        maskView = ViewportMaskView(frame: screen.frame)
+
+        super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        level = .floating
+        ignoresMouseEvents = true
+        hasShadow = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        contentView = maskView
+        alphaValue = 0
+
+        // Position at screen origin (Cocoa coordinates)
+        setFrameOrigin(screen.frame.origin)
+    }
+
+    /// Set viewport region (vif coordinates: top-left origin)
+    func setViewport(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) {
+        guard let screen = NSScreen.main else { return }
+        // Convert from vif (top-left) to Cocoa (bottom-left)
+        let cocoaY = screen.frame.height - y - height
+        maskView.viewportRect = NSRect(x: x, y: cocoaY, width: width, height: height)
+        maskView.needsDisplay = true
+    }
+
+    /// Set viewport to match an app window
+    func setViewportToApp(_ appName: String) -> Bool {
+        let runningApps = NSWorkspace.shared.runningApplications
+        guard let app = runningApps.first(where: { $0.localizedName == appName }),
+              let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return false
+        }
+
+        for window in windows {
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int32,
+                  ownerPID == app.processIdentifier,
+                  let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = bounds["X"], let y = bounds["Y"],
+                  let w = bounds["Width"], let h = bounds["Height"] else { continue }
+
+            // CGWindow coordinates are already top-left origin like vif
+            setViewport(x: x, y: y, width: w, height: h)
+            return true
+        }
+        return false
+    }
+
+    func showMask() {
+        orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            animator().alphaValue = 1.0
+        }
+    }
+
+    func hideMask() {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            animator().alphaValue = 0
+        }) {
+            self.orderOut(nil)
+        }
+    }
+}
+
+class ViewportMaskView: NSView {
+    var viewportRect: NSRect = .zero
+    var maskColor = NSColor.black.withAlphaComponent(0.7)
+    var borderColor = NSColor.white.withAlphaComponent(0.8)
+    var borderWidth: CGFloat = 2
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard viewportRect != .zero else { return }
+
+        // Draw dark overlay everywhere except viewport
+        maskColor.setFill()
+
+        // Top region
+        NSRect(x: 0, y: viewportRect.maxY, width: bounds.width, height: bounds.height - viewportRect.maxY).fill()
+        // Bottom region
+        NSRect(x: 0, y: 0, width: bounds.width, height: viewportRect.minY).fill()
+        // Left region
+        NSRect(x: 0, y: viewportRect.minY, width: viewportRect.minX, height: viewportRect.height).fill()
+        // Right region
+        NSRect(x: viewportRect.maxX, y: viewportRect.minY, width: bounds.width - viewportRect.maxX, height: viewportRect.height).fill()
+
+        // Draw border around viewport
+        borderColor.setStroke()
+        let borderPath = NSBezierPath(rect: viewportRect.insetBy(dx: -borderWidth/2, dy: -borderWidth/2))
+        borderPath.lineWidth = borderWidth
+        borderPath.stroke()
+
+        // Corner markers for precision
+        let markerSize: CGFloat = 20
+        let corners = [
+            (viewportRect.minX, viewportRect.maxY), // top-left
+            (viewportRect.maxX, viewportRect.maxY), // top-right
+            (viewportRect.minX, viewportRect.minY), // bottom-left
+            (viewportRect.maxX, viewportRect.minY), // bottom-right
+        ]
+
+        for (cx, cy) in corners {
+            let path = NSBezierPath()
+            // Horizontal line
+            path.move(to: NSPoint(x: cx - markerSize/2, y: cy))
+            path.line(to: NSPoint(x: cx + markerSize/2, y: cy))
+            // Vertical line
+            path.move(to: NSPoint(x: cx, y: cy - markerSize/2))
+            path.line(to: NSPoint(x: cx, y: cy + markerSize/2))
+            path.lineWidth = 2
+            path.stroke()
+        }
+    }
+}
+
+// MARK: - Scene Indicator Window
+
+class SceneIndicatorWindow: NSWindow {
+    let indicatorView = SceneIndicatorView()
+
+    init() {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 90, height: 32), styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        level = .floating
+        ignoresMouseEvents = true
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        indicatorView.frame = NSRect(x: 0, y: 0, width: 90, height: 32)
+        contentView = indicatorView
+        alphaValue = 0
+
+        // Position in top-right corner
+        if let screen = NSScreen.main {
+            let x = screen.visibleFrame.maxX - 100
+            let y = screen.visibleFrame.maxY - 42
+            setFrameOrigin(NSPoint(x: x, y: y))
+        }
+    }
+
+    func showIndicator() {
+        orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            animator().alphaValue = 1.0
+        }
+        indicatorView.startPulsing()
+    }
+
+    func hideIndicator() {
+        indicatorView.stopPulsing()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            animator().alphaValue = 0
+        }) {
+            self.orderOut(nil)
+        }
+    }
+}
+
+class SceneIndicatorView: NSView {
+    var pulseTimer: Timer?
+    var dotAlpha: CGFloat = 1.0
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+
+        // Background pill
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 14, yRadius: 14)
+        NSColor(white: 0.1, alpha: 0.85).setFill()
+        path.fill()
+
+        // Red recording dot
+        let dotRect = NSRect(x: 10, y: bounds.midY - 5, width: 10, height: 10)
+        ctx.setFillColor(NSColor.systemRed.withAlphaComponent(dotAlpha).cgColor)
+        ctx.fillEllipse(in: dotRect)
+
+        // "SCENE" label
+        let font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+        let label = "SCENE"
+        let size = (label as NSString).size(withAttributes: attrs)
+        (label as NSString).draw(at: NSPoint(x: 26, y: bounds.midY - size.height/2), withAttributes: attrs)
+    }
+
+    func startPulsing() {
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.dotAlpha = self.dotAlpha > 0.5 ? 0.3 : 1.0
+            self.needsDisplay = true
+        }
+    }
+
+    func stopPulsing() {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        dotAlpha = 1.0
+    }
+}
+
+// MARK: - Screen Recorder
+
+class ScreenRecorder {
+    enum Mode: String {
+        case draft
+        case final_
+
+        var preset: String {
+            switch self {
+            case .draft: return "ultrafast"
+            case .final_: return "slow"
+            }
+        }
+
+        var crf: Int {
+            switch self {
+            case .draft: return 28
+            case .final_: return 18
+            }
+        }
+
+        var fps: Int {
+            switch self {
+            case .draft: return 30
+            case .final_: return 60
+            }
+        }
+    }
+
+    private var process: Process?
+    private var isRecording = false
+    private var currentOutputPath: String?
+    private var currentMode: Mode = .draft
+    private var viewportRect: NSRect = .zero
+
+    static let vifDir: String = {
+        let path = NSHomeDirectory() + "/.vif"
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }()
+
+    static let recordingsDir: String = {
+        let path = vifDir + "/recordings"
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        return path
+    }()
+
+    func setViewport(_ rect: NSRect) {
+        self.viewportRect = rect
+    }
+
+    func start(mode: Mode = .draft, name: String? = nil) -> (success: Bool, path: String?, error: String?) {
+        guard !isRecording else {
+            return (false, nil, "Already recording")
+        }
+
+        // Determine output path
+        let outputPath: String
+        if mode == .draft {
+            outputPath = ScreenRecorder.vifDir + "/draft.mp4"
+            // Remove existing draft
+            try? FileManager.default.removeItem(atPath: outputPath)
+        } else {
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+                .replacingOccurrences(of: "T", with: "_")
+                .prefix(19)
+            let fileName = name ?? "recording"
+            outputPath = ScreenRecorder.recordingsDir + "/\(fileName)_\(timestamp).mp4"
+        }
+
+        currentOutputPath = outputPath
+        currentMode = mode
+
+        // Get recording region (viewport or full screen)
+        guard let screen = NSScreen.main else {
+            return (false, nil, "No screen available")
+        }
+
+        let captureRect: NSRect
+        if viewportRect != .zero {
+            // Convert from Cocoa (bottom-left) to screencapture (top-left)
+            let y = screen.frame.height - viewportRect.maxY
+            captureRect = NSRect(x: viewportRect.minX, y: y, width: viewportRect.width, height: viewportRect.height)
+        } else {
+            captureRect = screen.frame
+        }
+
+        // Build ffmpeg command
+        // Use avfoundation to capture screen, then crop to viewport
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+
+        // Calculate crop filter if viewport is set
+        let cropFilter: String
+        if viewportRect != .zero {
+            // viewportRect is in Cocoa coords (logical points, bottom-left origin)
+            // FFmpeg captures at physical pixels, so we need to scale by backingScaleFactor
+            // FFmpeg crop uses top-left origin: crop=w:h:x:y
+            let scale = screen.backingScaleFactor
+
+            // Convert logical points to physical pixels
+            let x = Int(viewportRect.minX * scale)
+            let y = Int((screen.frame.height - viewportRect.maxY) * scale)
+            let w = Int(viewportRect.width * scale)
+            let h = Int(viewportRect.height * scale)
+
+            fputs("recorder: scale=\(scale) screenH=\(Int(screen.frame.height)) physical=\(Int(screen.frame.height * scale))\n", stderr)
+            fputs("recorder: viewport Cocoa=(\(Int(viewportRect.minX)),\(Int(viewportRect.minY)),\(Int(viewportRect.width)),\(Int(viewportRect.height)))\n", stderr)
+            fputs("recorder: crop ffmpeg x=\(x) y=\(y) w=\(w) h=\(h)\n", stderr)
+
+            cropFilter = "crop=\(w):\(h):\(x):\(y),"
+        } else {
+            fputs("recorder: WARNING - viewportRect is zero, capturing full screen\n", stderr)
+            cropFilter = ""
+        }
+
+        // Scale to even dimensions (required by libx264)
+        let scaleFilter = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
+        process.arguments = [
+            "ffmpeg",
+            "-y",  // Overwrite output
+            "-f", "avfoundation",
+            "-capture_cursor", "0",  // Don't capture system cursor (we have our own)
+            "-framerate", "\(mode.fps)",
+            "-i", "3:none",  // Screen capture device (index 3 = "Capture screen 0")
+            "-vf", "\(cropFilter)\(scaleFilter)",
+            "-c:v", "libx264",
+            "-preset", mode.preset,
+            "-crf", "\(mode.crf)",
+            "-pix_fmt", "yuv420p",
+            outputPath
+        ]
+
+        // Suppress ffmpeg output
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            self.process = process
+            isRecording = true
+            fputs("recorder: started \(mode.rawValue) → \(outputPath)\n", stderr)
+            return (true, outputPath, nil)
+        } catch {
+            return (false, nil, "Failed to start ffmpeg: \(error.localizedDescription)")
+        }
+    }
+
+    func stop() -> (success: Bool, path: String?, error: String?) {
+        guard isRecording, let process = process else {
+            return (false, nil, "Not recording")
+        }
+
+        // Send SIGINT to gracefully stop ffmpeg (like Ctrl+C)
+        kill(process.processIdentifier, SIGINT)
+
+        // Wait for process to finish
+        process.waitUntilExit()
+
+        isRecording = false
+        let path = currentOutputPath
+        self.process = nil
+
+        fputs("recorder: stopped → \(path ?? "nil")\n", stderr)
+
+        // Get file size
+        if let path = path, let attrs = try? FileManager.default.attributesOfItem(atPath: path) {
+            let size = attrs[.size] as? Int64 ?? 0
+            let sizeMB = Double(size) / 1_000_000.0
+            fputs("recorder: file size = \(String(format: "%.1f", sizeMB)) MB\n", stderr)
+        }
+
+        return (true, path, nil)
+    }
+
+    func status() -> (recording: Bool, mode: String?, path: String?) {
+        return (isRecording, isRecording ? currentMode.rawValue : nil, currentOutputPath)
+    }
+}
+
 // MARK: - Agent
 
 class VifAgent: NSObject, NSApplicationDelegate {
-    let cursorWindow = CursorWindow()
-    let keysWindow = KeysWindow()
-    let typerWindow = TyperWindow()
+    // Lazy initialization - windows only created when first accessed
+    lazy var cursorWindow = CursorWindow()
+    lazy var keysWindow = KeysWindow()
+    lazy var typerWindow = TyperWindow()
+    lazy var sceneIndicator = SceneIndicatorWindow()
+    lazy var viewportMask = ViewportMaskWindow()
+    lazy var recorder = ScreenRecorder()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Check accessibility
-        if !checkAccessibility() {
-            print("{\"event\":\"error\",\"message\":\"Accessibility permission required\"}")
-            fflush(stdout)
-        }
+        // Emit ready FIRST so server knows we're alive
+        print("{\"event\":\"ready\",\"version\":\"1.0\"}")
+        fflush(stdout)
 
         // Read stdin
         DispatchQueue.global(qos: .userInteractive).async {
@@ -563,8 +988,12 @@ class VifAgent: NSObject, NSApplicationDelegate {
             }
         }
 
-        print("{\"event\":\"ready\",\"version\":\"1.0\"}")
-        fflush(stdout)
+        // Check accessibility (non-blocking for startup)
+        DispatchQueue.main.async {
+            if !checkAccessibility() {
+                fputs("vif-agent: accessibility permission required\n", stderr)
+            }
+        }
     }
 
     func handleCommand(_ line: String) {
@@ -587,6 +1016,10 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handleKeys(cmd, json)
         case "typer":
             handleTyper(cmd, json)
+        case "viewport":
+            handleViewport(cmd, json)
+        case "record":
+            handleRecord(cmd, json)
         default:
             if action == "quit" {
                 respond(["ok": true])
@@ -601,8 +1034,10 @@ class VifAgent: NSObject, NSApplicationDelegate {
         switch cmd {
         case "show":
             cursorWindow.showCursor()
+            sceneIndicator.showIndicator()
         case "hide":
             cursorWindow.hideCursor()
+            sceneIndicator.hideIndicator()
         case "moveTo":
             let x = (json["x"] as? NSNumber)?.doubleValue ?? 0
             let y = (json["y"] as? NSNumber)?.doubleValue ?? 0
@@ -664,6 +1099,87 @@ class VifAgent: NSObject, NSApplicationDelegate {
             return
         }
         respond(["ok": true])
+    }
+
+    func handleViewport(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "set":
+            // Set viewport by rect or by app name
+            if let app = json["app"] as? String {
+                if viewportMask.setViewportToApp(app) {
+                    // Sync viewport to recorder
+                    recorder.setViewport(viewportMask.maskView.viewportRect)
+                    respond(["ok": true])
+                } else {
+                    respond(["ok": false, "error": "App not found: \(app)"])
+                }
+                return
+            }
+
+            // Set by explicit coordinates
+            let x = (json["x"] as? NSNumber)?.doubleValue ?? 0
+            let y = (json["y"] as? NSNumber)?.doubleValue ?? 0
+            let width = (json["width"] as? NSNumber)?.doubleValue ?? 800
+            let height = (json["height"] as? NSNumber)?.doubleValue ?? 600
+            viewportMask.setViewport(x: x, y: y, width: width, height: height)
+            // Sync viewport to recorder
+            recorder.setViewport(viewportMask.maskView.viewportRect)
+
+        case "show":
+            viewportMask.showMask()
+
+        case "hide":
+            viewportMask.hideMask()
+
+        default:
+            respond(["ok": false, "error": "unknown viewport cmd: \(cmd)"])
+            return
+        }
+        respond(["ok": true])
+    }
+
+    func handleRecord(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "start":
+            let modeStr = json["mode"] as? String ?? "draft"
+            let mode: ScreenRecorder.Mode = modeStr == "final" ? .final_ : .draft
+            let name = json["name"] as? String
+
+            let result = recorder.start(mode: mode, name: name)
+            if result.success {
+                respond(["ok": true, "path": result.path ?? "", "mode": modeStr])
+            } else {
+                respond(["ok": false, "error": result.error ?? "Unknown error"])
+            }
+
+        case "stop":
+            let result = recorder.stop()
+            if result.success {
+                // Get file info
+                var response: [String: Any] = ["ok": true, "path": result.path ?? ""]
+                if let path = result.path,
+                   let attrs = try? FileManager.default.attributesOfItem(atPath: path) {
+                    let size = attrs[.size] as? Int64 ?? 0
+                    response["sizeBytes"] = size
+                    response["sizeMB"] = Double(size) / 1_000_000.0
+                }
+                respond(response)
+            } else {
+                respond(["ok": false, "error": result.error ?? "Unknown error"])
+            }
+
+        case "status":
+            let status = recorder.status()
+            respond([
+                "ok": true,
+                "recording": status.recording,
+                "mode": status.mode ?? "",
+                "path": status.path ?? ""
+            ])
+
+        default:
+            respond(["ok": false, "error": "unknown record cmd: \(cmd)"])
+        }
     }
 
     func respond(_ dict: [String: Any]) {

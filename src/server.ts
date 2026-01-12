@@ -28,6 +28,19 @@
  *   {"id": 21, "action": "typer.clear"}
  *   {"id": 22, "action": "typer.hide"}
  *
+ *   // Viewport (recording region mask)
+ *   {"id": 25, "action": "viewport.set", "x": 100, "y": 100, "width": 1280, "height": 720}
+ *   {"id": 26, "action": "viewport.set", "app": "Talkie"}  // Match app window
+ *   {"id": 27, "action": "viewport.show"}
+ *   {"id": 28, "action": "viewport.hide"}
+ *
+ *   // Recording (draft mode overwrites ~/.vif/draft.mp4)
+ *   {"id": 40, "action": "record.start"}                              // draft mode
+ *   {"id": 41, "action": "record.start", "mode": "final"}             // final mode
+ *   {"id": 42, "action": "record.start", "mode": "final", "name": "feature-demo"}
+ *   {"id": 43, "action": "record.stop"}
+ *   {"id": 44, "action": "record.status"}
+ *
  *   // Legacy shortcuts (for compatibility)
  *   {"id": 30, "action": "move", "x": 500, "y": 300}  → cursor.moveTo
  *   {"id": 31, "action": "click"}                     → cursor.click
@@ -216,7 +229,9 @@ export class JsonRpcServer {
   private async handleCommand(cmd: Command): Promise<Response> {
     const { id, action } = cmd;
 
-    this.log(`← ${action}${id ? ` (id: ${id})` : ''}`);
+    // Enhanced logging with coordinates/params
+    const params = this.formatParams(cmd);
+    this.log(`← ${action}${params}${id ? ` (id: ${id})` : ''}`);
 
     // Check if agent is required but not available
     if (!this.agent && !['ping'].includes(action)) {
@@ -317,6 +332,10 @@ export class JsonRpcServer {
         return this.handleKeysCommand(id, method, cmd);
       case 'typer':
         return this.handleTyperCommand(id, method, cmd);
+      case 'viewport':
+        return this.handleViewportCommand(id, method, cmd);
+      case 'record':
+        return this.handleRecordCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -419,6 +438,77 @@ export class JsonRpcServer {
     }
   }
 
+  private async handleViewportCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'set': {
+        const { x, y, width, height, app } = cmd;
+        if (typeof app === 'string') {
+          await this.agent!.viewportSetApp(app);
+        } else if (typeof x === 'number' && typeof y === 'number' &&
+                   typeof width === 'number' && typeof height === 'number') {
+          await this.agent!.viewportSet(x, y, width, height);
+        } else {
+          return { id, ok: false, error: 'viewport.set requires (x, y, width, height) or app name' };
+        }
+        return { id, ok: true };
+      }
+
+      case 'show':
+        await this.agent!.viewportShow();
+        return { id, ok: true };
+
+      case 'hide':
+        await this.agent!.viewportHide();
+        return { id, ok: true };
+
+      default:
+        return { id, ok: false, error: `Unknown viewport method: ${method}` };
+    }
+  }
+
+  private async handleRecordCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'start': {
+        const mode = (cmd.mode as 'draft' | 'final') || 'draft';
+        const name = cmd.name as string | undefined;
+        const result = await this.agent!.recordStart(mode, name);
+        return {
+          id,
+          ok: result.ok ?? true,
+          path: result.path as string,
+          mode,
+          error: result.error as string | undefined,
+        };
+      }
+
+      case 'stop': {
+        const result = await this.agent!.recordStop();
+        return {
+          id,
+          ok: result.ok ?? true,
+          path: result.path as string,
+          sizeBytes: result.sizeBytes as number,
+          sizeMB: result.sizeMB as number,
+          error: result.error as string | undefined,
+        };
+      }
+
+      case 'status': {
+        const result = await this.agent!.recordStatus();
+        return {
+          id,
+          ok: true,
+          recording: result.recording as boolean,
+          mode: result.mode as string,
+          path: result.path as string,
+        };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown record method: ${method}` };
+    }
+  }
+
   private send(ws: WebSocket, data: Response | ServerEvent): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
@@ -426,9 +516,35 @@ export class JsonRpcServer {
   }
 
   private log(msg: string): void {
-    if (this.options.verbose) {
-      console.log(`[vif] ${msg}`);
+    // Always log - this is useful for debugging demos
+    console.log(`[vif] ${msg}`);
+  }
+
+  private formatParams(cmd: Command): string {
+    const { action, id, ...rest } = cmd;
+    const parts: string[] = [];
+
+    // Format key parameters for common actions
+    if ('x' in rest && 'y' in rest) {
+      parts.push(`x=${rest.x}, y=${rest.y}`);
+      if ('duration' in rest) parts.push(`dur=${rest.duration}s`);
     }
+    if ('text' in rest) {
+      const text = String(rest.text);
+      parts.push(`"${text.length > 30 ? text.slice(0, 30) + '...' : text}"`);
+    }
+    if ('keys' in rest && Array.isArray(rest.keys)) {
+      parts.push(`[${(rest.keys as string[]).join('+')}]`);
+    }
+    if ('style' in rest) parts.push(`style=${rest.style}`);
+    if ('width' in rest && 'height' in rest) {
+      parts.push(`${rest.width}x${rest.height}`);
+    }
+    if ('app' in rest) parts.push(`app="${rest.app}"`);
+    if ('mode' in rest) parts.push(`mode=${rest.mode}`);
+    if ('name' in rest) parts.push(`name="${rest.name}"`);
+
+    return parts.length > 0 ? ` (${parts.join(', ')})` : '';
   }
 }
 

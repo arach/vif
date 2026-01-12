@@ -875,4 +875,6 @@ export * from './viewport.js';
 export * from './automation.js';
 // Export server
 export * from './server.js';
+// Export agent client (native overlays)
+export * from './agent-client.js';
 //# sourceMappingURL=index.js.map
