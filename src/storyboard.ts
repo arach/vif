@@ -391,7 +391,7 @@ export async function renderEnhancedStoryboard(
         const mixFilter = `${narrationFilters.join(';')};${mixInputs}amix=inputs=${narrationInputs.length}:duration=longest:normalize=0[aout]`;
 
         execSync(
-          `ffmpeg -y -i "${currentPath}" ${narrationInputs.join(' ')} -filter_complex "${mixFilter}" -map 0:v -map "[aout]" -c:v copy -c:a aac "${withNarrationPath}"`,
+          `ffmpeg -y -i "${currentPath}" ${narrationInputs.join(' ')} -filter_complex "${mixFilter}" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 "${withNarrationPath}"`,
           { stdio: 'pipe' }
         );
         currentPath = withNarrationPath;
@@ -442,13 +442,13 @@ export async function renderEnhancedStoryboard(
         if (hasAudio === 'audio') {
           // Mix with existing audio
           execSync(
-            `ffmpeg -y -i "${currentPath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]${audioFilter}[music];[0:a][music]amix=inputs=2:duration=first:normalize=0[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -shortest "${withMusicPath}"`,
+            `ffmpeg -y -i "${currentPath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]${audioFilter}[music];[0:a][music]amix=inputs=2:duration=first:normalize=0[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -shortest "${withMusicPath}"`,
             { stdio: 'pipe' }
           );
         } else {
           // Just add music
           execSync(
-            `ffmpeg -y -i "${currentPath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]${audioFilter}[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -shortest "${withMusicPath}"`,
+            `ffmpeg -y -i "${currentPath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]${audioFilter}[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -shortest "${withMusicPath}"`,
             { stdio: 'pipe' }
           );
         }
@@ -464,7 +464,8 @@ export async function renderEnhancedStoryboard(
       mkdirSync(outputDir, { recursive: true });
     }
 
-    execSync(`cp "${currentPath}" "${outputPath}"`);
+    // Final encode with QuickTime-friendly settings
+    execSync(`ffmpeg -y -i "${currentPath}" -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -movflags +faststart "${outputPath}"`, { stdio: 'pipe' });
 
     progress('complete', 1, 1, `Output: ${outputPath}`);
     return existsSync(outputPath);
