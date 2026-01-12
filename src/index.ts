@@ -1200,5 +1200,8 @@ export * from './voice.js';
 // Export cache module
 export * from './cache.js';
 
+// Export cursor module
+export * from './cursor.js';
+
 // Export types
 export type { ChildProcess };

@@ -867,4 +867,6 @@ export * from './music.js';
 export * from './voice.js';
 // Export cache module
 export * from './cache.js';
+// Export cursor module
+export * from './cursor.js';
 //# sourceMappingURL=index.js.map

@@ -304,5 +304,6 @@ export * from './storyboard.js';
 export * from './music.js';
 export * from './voice.js';
 export * from './cache.js';
+export * from './cursor.js';
 export type { ChildProcess };
 //# sourceMappingURL=index.d.ts.map

@@ -14,6 +14,17 @@ import { renderSlide, closeBrowser } from './slides.js';
 import { templates, TemplateName } from './templates/index.js';
 import { screenshot, screenshotApp, hasFFmpeg } from './index.js';
 import { generateNarration as generateNarrationVoice, VoiceOptions } from './voice.js';
+import {
+  CursorConfig,
+  ZoomPanConfig,
+  startCursorTracking,
+  applyCursorOverlay,
+  applyCursorZoomPan,
+  generateDefaultCursor,
+  CursorTrack,
+  loadCursorTrack,
+  saveCursorTrack
+} from './cursor.js';
 
 // ============================================================================
 // Types
@@ -94,6 +105,26 @@ export interface VideoBlock {
   speed?: number;
 }
 
+export interface RecordingBlock {
+  type: 'recording';
+  /** Pre-recorded video file path */
+  source: string;
+  /** Duration (uses full video if not specified) */
+  duration?: number;
+  narration?: string;
+  transition?: TransitionConfig | string;
+  /** Speed multiplier (e.g., 1.5 for 1.5x speed) */
+  speed?: number;
+  /** Custom cursor configuration */
+  cursor?: CursorConfig | boolean;
+  /** Cursor-following zoom/pan */
+  zoomPan?: ZoomPanConfig | boolean;
+  /** Cursor track file (JSON with positions) */
+  cursorTrack?: string;
+  /** Spotlight effect following cursor */
+  spotlight?: boolean;
+}
+
 export interface IntroBlock extends Omit<SlideBlock, 'type'> {
   type: 'intro';
 }
@@ -102,7 +133,7 @@ export interface OutroBlock extends Omit<SlideBlock, 'type'> {
   type: 'outro';
 }
 
-export type StoryboardBlock = SlideBlock | ScreenshotBlock | VideoBlock | IntroBlock | OutroBlock;
+export type StoryboardBlock = SlideBlock | ScreenshotBlock | VideoBlock | RecordingBlock | IntroBlock | OutroBlock;
 
 export interface EnhancedStoryboard {
   name: string;
@@ -279,6 +310,89 @@ async function renderBlock(
       );
 
       execSync(`ffmpeg ${args.map(a => `"${a}"`).join(' ')}`, { stdio: 'pipe' });
+      return { video: outputPath, audio: audioPath };
+    }
+
+    case 'recording': {
+      const recBlock = block as RecordingBlock;
+      const sourcePath = resolve(basePath, recBlock.source);
+
+      if (!existsSync(sourcePath)) {
+        throw new Error(`Recording source not found: ${sourcePath}`);
+      }
+
+      let currentVideo = sourcePath;
+      const tempRecDir = join(dirname(outputPath), `rec-temp-${Date.now()}`);
+      mkdirSync(tempRecDir, { recursive: true });
+
+      // Step 1: Load or create cursor track
+      let cursorTrack: CursorTrack | null = null;
+      if (recBlock.cursorTrack) {
+        cursorTrack = loadCursorTrack(resolve(basePath, recBlock.cursorTrack));
+      }
+
+      // Step 2: Apply speed change if specified
+      if (recBlock.speed && recBlock.speed !== 1) {
+        const speedVideo = join(tempRecDir, 'speed.mp4');
+        const pts = 1 / recBlock.speed;
+        execSync(
+          `ffmpeg -y -i "${currentVideo}" -filter:v "setpts=${pts}*PTS" -an "${speedVideo}"`,
+          { stdio: 'pipe' }
+        );
+        currentVideo = speedVideo;
+      }
+
+      // Step 3: Apply cursor-following zoom/pan
+      if (recBlock.zoomPan && cursorTrack) {
+        const zoomConfig: ZoomPanConfig = typeof recBlock.zoomPan === 'boolean'
+          ? { enabled: true, zoom: 1.5 }
+          : recBlock.zoomPan;
+
+        if (zoomConfig.enabled) {
+          const zoomVideo = join(tempRecDir, 'zoom.mp4');
+          applyCursorZoomPan(currentVideo, zoomVideo, cursorTrack, zoomConfig, resolution);
+          if (existsSync(zoomVideo)) {
+            currentVideo = zoomVideo;
+          }
+        }
+      }
+
+      // Step 4: Apply custom cursor overlay
+      if (recBlock.cursor && cursorTrack) {
+        const cursorConfig: CursorConfig = typeof recBlock.cursor === 'boolean'
+          ? { color: '#FF5722' }
+          : recBlock.cursor;
+
+        const cursorVideo = join(tempRecDir, 'cursor.mp4');
+        applyCursorOverlay(currentVideo, cursorVideo, cursorTrack, cursorConfig);
+        if (existsSync(cursorVideo)) {
+          currentVideo = cursorVideo;
+        }
+      }
+
+      // Step 5: Normalize to target resolution and fps
+      const args: string[] = ['-y', '-i', currentVideo];
+
+      if (recBlock.duration !== undefined) {
+        args.push('-t', String(recBlock.duration));
+      }
+
+      args.push(
+        '-vf', `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`,
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '18',
+        '-an',
+        outputPath
+      );
+
+      execSync(`ffmpeg ${args.map(a => `"${a}"`).join(' ')}`, { stdio: 'pipe' });
+
+      // Cleanup temp
+      try {
+        execSync(`rm -rf "${tempRecDir}"`, { stdio: 'pipe' });
+      } catch {}
+
       return { video: outputPath, audio: audioPath };
     }
 

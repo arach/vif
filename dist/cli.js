@@ -6,6 +6,7 @@ import { screenshot, screenshotApp, screenshotFullscreen, startRecording, record
 import { printMusicRecommendations } from './music.js';
 import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.js';
 import { printCacheInfo, clearCache } from './cache.js';
+import { startCursorTracking, saveCursorTrack } from './cursor.js';
 const args = process.argv.slice(2);
 const command = args[0];
 function printHelp() {
@@ -20,6 +21,7 @@ Capture Commands:
   shot --app <name> <output>   Screenshot an app window
   record <output.mp4>          Start video recording (Ctrl+C to stop)
   record --duration <s> <out>  Record for specific duration
+  record-demo <output.mp4>     Record with cursor tracking for demos
 
 Processing Commands:
   convert <input> <output>     Convert/process video
@@ -210,6 +212,46 @@ async function main() {
                 });
                 await new Promise(() => { });
             }
+            break;
+        }
+        case 'record-demo': {
+            const output = opts._positional || 'demo.mp4';
+            const cursorOutput = output.replace(/\.[^.]+$/, '-cursor.json');
+            console.log('Recording demo with cursor tracking...');
+            console.log('Press Ctrl+C to stop\n');
+            // Start cursor tracking
+            const cursorTracker = startCursorTracking();
+            // Start recording
+            const recording = startRecording({
+                output,
+                audio: false // Demos typically don't need system audio
+            });
+            process.on('SIGINT', async () => {
+                console.log('\nStopping recording...');
+                try {
+                    // Stop cursor tracking first
+                    const cursorTrack = cursorTracker.stop();
+                    saveCursorTrack(cursorTrack, cursorOutput);
+                    console.log(`Cursor track saved: ${cursorOutput}`);
+                    // Stop video recording
+                    const result = await recording.stop();
+                    console.log(`Recording saved: ${result}`);
+                    console.log('\nUse in storyboard:');
+                    console.log('  - type: recording');
+                    console.log(`    source: ${output}`);
+                    console.log(`    cursorTrack: ${cursorOutput}`);
+                    console.log('    cursor: true');
+                    console.log('    zoomPan:');
+                    console.log('      enabled: true');
+                    console.log('      zoom: 1.5');
+                    process.exit(0);
+                }
+                catch (error) {
+                    console.error('Failed to save:', error);
+                    process.exit(1);
+                }
+            });
+            await new Promise(() => { });
             break;
         }
         case 'convert': {
