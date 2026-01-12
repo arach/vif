@@ -99,23 +99,25 @@ export function startCursorTracking(): { stop: () => CursorTrack } {
   const startTime = Date.now();
   let running = true;
 
-  // Poll cursor position
+  // Poll cursor position using mouse location from Quartz
   const interval = setInterval(() => {
     if (!running) return;
 
     try {
-      // Get cursor position using AppleScript
+      // Use JXA (JavaScript for Automation) to get mouse position
       const result = execSync(
-        `osascript -e 'tell application "System Events" to return (get position of mouse)'`,
-        { encoding: 'utf-8', timeout: 100 }
+        `osascript -l JavaScript -e 'ObjC.import("AppKit"); var loc = $.NSEvent.mouseLocation; loc.x.toFixed(0) + "," + loc.y.toFixed(0);'`,
+        { encoding: 'utf-8', timeout: 200 }
       ).trim();
 
-      const [x, y] = result.split(', ').map(Number);
-      positions.push({
-        x,
-        y,
-        timestamp: Date.now() - startTime,
-      });
+      const [x, y] = result.split(',').map(Number);
+      if (!isNaN(x) && !isNaN(y)) {
+        positions.push({
+          x,
+          y,
+          timestamp: Date.now() - startTime,
+        });
+      }
     } catch {
       // Ignore errors during tracking
     }
