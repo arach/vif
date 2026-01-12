@@ -388,7 +388,7 @@ export async function renderEnhancedStoryboard(
       if (narrationInputs.length > 0) {
         const withNarrationPath = join(tempDir, 'with-narration.mp4');
         const mixInputs = narrationFilters.map((_, i) => `[a${i + 1}]`).join('');
-        const mixFilter = `${narrationFilters.join(';')};${mixInputs}amix=inputs=${narrationInputs.length}:duration=longest[aout]`;
+        const mixFilter = `${narrationFilters.join(';')};${mixInputs}amix=inputs=${narrationInputs.length}:duration=longest:normalize=0[aout]`;
 
         execSync(
           `ffmpeg -y -i "${currentPath}" ${narrationInputs.join(' ')} -filter_complex "${mixFilter}" -map 0:v -map "[aout]" -c:v copy -c:a aac "${withNarrationPath}"`,
@@ -442,7 +442,7 @@ export async function renderEnhancedStoryboard(
         if (hasAudio === 'audio') {
           // Mix with existing audio
           execSync(
-            `ffmpeg -y -i "${currentPath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]${audioFilter}[music];[0:a][music]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -shortest "${withMusicPath}"`,
+            `ffmpeg -y -i "${currentPath}" -stream_loop -1 -i "${musicPath}" -filter_complex "[1:a]${audioFilter}[music];[0:a][music]amix=inputs=2:duration=first:normalize=0[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -shortest "${withMusicPath}"`,
             { stdio: 'pipe' }
           );
         } else {
