@@ -857,4 +857,9 @@ export function renderStoryboardFile(path, options) {
         ...options
     });
 }
+// Export slide templates and renderer
+export * from './templates/index.js';
+export * from './slides.js';
+// Export enhanced storyboard system
+export * from './storyboard.js';
 //# sourceMappingURL=index.js.map

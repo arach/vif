@@ -298,5 +298,8 @@ export declare function renderStoryboardFile(path: string, options?: {
     bpm?: number;
     verbose?: boolean;
 }): boolean;
+export * from './templates/index.js';
+export * from './slides.js';
+export * from './storyboard.js';
 export type { ChildProcess };
 //# sourceMappingURL=index.d.ts.map

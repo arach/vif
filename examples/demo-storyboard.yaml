@@ -1,0 +1,71 @@
+# Vif Demo Storyboard
+# A complete video with intro, screenshots, video, and outro
+# With background music and voiceover
+
+name: vif-demo
+output: demo.mp4
+
+resolution:
+  width: 1920
+  height: 1080
+fps: 30
+
+# Background music (optional)
+music:
+  source: music.mp3  # Local file path
+  volume: 0.3
+  fadeIn: 1
+  fadeOut: 2
+
+# Voice configuration for narration
+voice:
+  provider: system  # openai, elevenlabs, or system
+  voice: Samantha   # macOS voice name
+  rate: 180
+
+sequence:
+  # Intro slide
+  - type: intro
+    title: "Introducing Vif"
+    subtitle: "Declarative Screen Capture"
+    duration: 4
+    narration: "Meet Vif, the screen capture tool built for AI agents."
+
+  # Screenshot of an app
+  - type: screenshot
+    app: Safari
+    duration: 5
+    narration: "Capture any app window with a single command."
+    animate: zoom-in
+    transition: crossfade
+
+  # Video clip
+  - type: video
+    source: recording.mp4
+    startTime: 0
+    duration: 10
+    narration: "Watch how easy it is to create professional videos from YAML."
+
+  # Feature highlight slide
+  - type: slide
+    template: title-card
+    title: "Key Features"
+    subtitle: "Screenshots • Video • GIFs • Storyboards"
+    duration: 4
+    narration: "Vif supports screenshots, video recording, GIF creation, and declarative storyboards."
+    background: "linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)"
+
+  # Another screenshot
+  - type: screenshot
+    url: "https://vif.jdi.sh"
+    duration: 5
+    narration: "Everything is configured in simple YAML files."
+    transition: fade
+
+  # Outro
+  - type: outro
+    cta: "Get Started Today"
+    url: "vif.jdi.sh"
+    tagline: "Declarative Screen Capture for macOS"
+    duration: 4
+    narration: "Try Vif today. Visit vif dot jdi dot sh."

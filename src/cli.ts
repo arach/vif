@@ -22,7 +22,12 @@ import {
   listTakes,
   revertTake,
   pruneTakes,
-  renderStoryboardFile
+  renderStoryboardFile,
+  renderSlide,
+  closeBrowser,
+  templates,
+  TemplateName,
+  renderStoryboardFileEnhanced
 } from './index.js';
 
 const args = process.argv.slice(2);
@@ -50,6 +55,10 @@ Processing Commands:
 Storyboard Commands:
   render <storyboard.yaml>     Render a storyboard to video
   analyze <audio>              Analyze audio file (duration, beats)
+
+Slide Commands:
+  slide <template> <output>    Render a slide template to PNG
+  slide list                   List available templates
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -366,15 +375,24 @@ async function main() {
       const storyboardPath = opts._positional as string;
 
       if (!storyboardPath) {
-        console.error('Usage: vif render <storyboard.yaml> [--bpm N] [--verbose]');
+        console.error('Usage: vif render <storyboard.yaml> [--verbose]');
         process.exit(1);
       }
 
-      const bpm = opts.bpm ? parseInt(opts.bpm as string, 10) : undefined;
       const verbose = opts.verbose === true;
+      const legacy = opts.legacy === true;
 
       console.log(`Rendering storyboard: ${storyboardPath}`);
-      const success = renderStoryboardFile(storyboardPath, { bpm, verbose });
+
+      let success: boolean;
+      if (legacy) {
+        // Use legacy renderer for simple clip concatenation
+        const bpm = opts.bpm ? parseInt(opts.bpm as string, 10) : undefined;
+        success = renderStoryboardFile(storyboardPath, { bpm, verbose });
+      } else {
+        // Use enhanced renderer with slides, screenshots, narration
+        success = await renderStoryboardFileEnhanced(storyboardPath, { verbose });
+      }
 
       if (success) {
         console.log('Render complete!');
@@ -487,6 +505,69 @@ async function main() {
       console.log('System check:');
       console.log(`  screencapture: available (macOS built-in)`);
       console.log(`  ffmpeg: ${hasFFmpeg() ? 'available' : 'NOT FOUND (install with: brew install ffmpeg)'}`);
+      break;
+    }
+
+    case 'slide': {
+      const templateOrSubcmd = opts._positional as string;
+
+      if (!templateOrSubcmd || templateOrSubcmd === 'list') {
+        console.log('\nAvailable slide templates:');
+        console.log('─'.repeat(40));
+        for (const name of Object.keys(templates)) {
+          console.log(`  ${name}`);
+        }
+        console.log('\nUsage: vif slide <template> <output.png> --title "..." [options]');
+        console.log('\nCommon options:');
+        console.log('  --title        Main title text');
+        console.log('  --subtitle     Subtitle text');
+        console.log('  --width        Width in pixels (default: 1920)');
+        console.log('  --height       Height in pixels (default: 1080)');
+        console.log('  --background   CSS background value');
+        console.log('\nExamples:');
+        console.log('  vif slide title-card intro.png --title "Hello World" --subtitle "Welcome"');
+        console.log('  vif slide outro cta.png --cta "Get Started" --url "example.com"');
+        break;
+      }
+
+      const template = templateOrSubcmd as TemplateName;
+      const output = opts._positional2 as string;
+
+      if (!output) {
+        console.error('Usage: vif slide <template> <output.png> --title "..." [options]');
+        process.exit(1);
+      }
+
+      if (!templates[template]) {
+        console.error(`Unknown template: ${template}`);
+        console.error(`Available: ${Object.keys(templates).join(', ')}`);
+        process.exit(1);
+      }
+
+      // Build props from CLI options
+      const props: Record<string, any> = {};
+      for (const [key, value] of Object.entries(opts)) {
+        if (!key.startsWith('_') && typeof value === 'string') {
+          props[key] = value;
+        }
+      }
+
+      console.log(`Rendering ${template} to ${output}...`);
+
+      try {
+        await renderSlide({
+          template,
+          props: props as any,
+          output,
+          width: opts.width ? parseInt(opts.width as string, 10) : 1920,
+          height: opts.height ? parseInt(opts.height as string, 10) : 1080
+        });
+        await closeBrowser();
+        console.log(`Slide saved: ${output}`);
+      } catch (error) {
+        console.error('Failed to render slide:', error);
+        process.exit(1);
+      }
       break;
     }
 
