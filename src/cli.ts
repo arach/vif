@@ -31,6 +31,7 @@ import {
 } from './index.js';
 import { printMusicRecommendations, generatePlaceholderAudio } from './music.js';
 import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.js';
+import { printCacheInfo, clearCache, getCacheStats } from './cache.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -67,6 +68,10 @@ Audio Commands:
   voice                        Show available voice options
   voice list                   List system voices
   narrate <text> <output>      Generate narration audio
+
+Cache Commands:
+  cache                        Show cache info
+  cache clear                  Clear the asset cache
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -519,6 +524,17 @@ async function main() {
     case 'music': {
       const contentType = opts._positional as string;
       printMusicRecommendations(contentType);
+      break;
+    }
+
+    case 'cache': {
+      const subCmd = opts._positional as string;
+      if (subCmd === 'clear') {
+        clearCache();
+        console.log('Cache cleared.');
+      } else {
+        printCacheInfo();
+      }
       break;
     }
 

@@ -1197,5 +1197,8 @@ export * from './storyboard.js';
 export * from './music.js';
 export * from './voice.js';
 
+// Export cache module
+export * from './cache.js';
+
 // Export types
 export type { ChildProcess };

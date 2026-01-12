@@ -303,5 +303,6 @@ export * from './slides.js';
 export * from './storyboard.js';
 export * from './music.js';
 export * from './voice.js';
+export * from './cache.js';
 export type { ChildProcess };
 //# sourceMappingURL=index.d.ts.map

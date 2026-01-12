@@ -865,4 +865,6 @@ export * from './storyboard.js';
 // Export music and voice modules
 export * from './music.js';
 export * from './voice.js';
+// Export cache module
+export * from './cache.js';
 //# sourceMappingURL=index.js.map
