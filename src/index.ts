@@ -1212,5 +1212,8 @@ export * from './automation.js';
 // Export server
 export * from './server.js';
 
+// Export agent client (native overlays)
+export * from './agent-client.js';
+
 // Export types
 export type { ChildProcess };

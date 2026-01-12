@@ -9,10 +9,12 @@
     "vif": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc && swiftc src/mouse.swift -o dist/vif-mouse 2>/dev/null || true",
-    "build:swift": "swiftc src/mouse.swift -o dist/vif-mouse",
+    "build": "tsc && npm run build:agent",
+    "build:agent": "swiftc -O -o dist/vif-agent src/agent/main.swift -framework Cocoa -framework Carbon && npm run build:app-bundle",
+    "build:app-bundle": "mkdir -p 'dist/Vif Agent.app/Contents/MacOS' 'dist/Vif Agent.app/Contents/Resources' && cp dist/vif-agent 'dist/Vif Agent.app/Contents/MacOS/' && cp scripts/Info.plist 'dist/Vif Agent.app/Contents/'",
     "dev": "tsc --watch",
-    "test": "node dist/test.js"
+    "test": "node dist/test.js",
+    "postinstall": "node scripts/postinstall.cjs"
   },
   "keywords": [
     "screenshot",
