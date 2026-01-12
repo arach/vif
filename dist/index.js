@@ -862,4 +862,7 @@ export * from './templates/index.js';
 export * from './slides.js';
 // Export enhanced storyboard system
 export * from './storyboard.js';
+// Export music and voice modules
+export * from './music.js';
+export * from './voice.js';
 //# sourceMappingURL=index.js.map

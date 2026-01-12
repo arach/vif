@@ -1193,5 +1193,9 @@ export * from './slides.js';
 // Export enhanced storyboard system
 export * from './storyboard.js';
 
+// Export music and voice modules
+export * from './music.js';
+export * from './voice.js';
+
 // Export types
 export type { ChildProcess };

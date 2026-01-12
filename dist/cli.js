@@ -3,6 +3,8 @@
  * Vif CLI - Vivid screen capture for macOS
  */
 import { screenshot, screenshotApp, screenshotFullscreen, startRecording, recordVideo, convertVideo, optimizeForWeb, videoToGif, activateApp, listWindows, hasFFmpeg, analyzeAudio, mixAudio, createTake, listTakes, revertTake, pruneTakes, renderStoryboardFile, renderSlide, closeBrowser, templates, renderStoryboardFileEnhanced } from './index.js';
+import { printMusicRecommendations } from './music.js';
+import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.js';
 const args = process.argv.slice(2);
 const command = args[0];
 function printHelp() {
@@ -31,6 +33,12 @@ Storyboard Commands:
 Slide Commands:
   slide <template> <output>    Render a slide template to PNG
   slide list                   List available templates
+
+Audio Commands:
+  music                        Show royalty-free music sources
+  voice                        Show available voice options
+  voice list                   List system voices
+  narrate <text> <output>      Generate narration audio
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -440,6 +448,50 @@ async function main() {
             console.log('System check:');
             console.log(`  screencapture: available (macOS built-in)`);
             console.log(`  ffmpeg: ${hasFFmpeg() ? 'available' : 'NOT FOUND (install with: brew install ffmpeg)'}`);
+            break;
+        }
+        case 'music': {
+            const contentType = opts._positional;
+            printMusicRecommendations(contentType);
+            break;
+        }
+        case 'voice': {
+            const subCmd = opts._positional;
+            if (subCmd === 'list') {
+                const voices = getSystemVoices();
+                console.log('\nAvailable system voices:');
+                console.log('─'.repeat(40));
+                for (const voice of voices) {
+                    console.log(`  ${voice}`);
+                }
+                console.log(`\nTotal: ${voices.length} voices`);
+            }
+            else {
+                printVoiceOptions();
+            }
+            break;
+        }
+        case 'narrate': {
+            const text = opts._positional;
+            const output = opts._positional2 || 'narration.mp3';
+            if (!text) {
+                console.error('Usage: vif narrate "text to speak" output.mp3 [--voice NAME]');
+                process.exit(1);
+            }
+            const voice = opts.voice;
+            const provider = opts.provider || 'system';
+            console.log(`Generating narration...`);
+            const success = await generateNarration(text, output, {
+                provider: provider,
+                voice,
+            });
+            if (success) {
+                console.log(`Narration saved: ${output}`);
+            }
+            else {
+                console.error('Narration failed');
+                process.exit(1);
+            }
             break;
         }
         case 'slide': {

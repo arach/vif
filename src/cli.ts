@@ -29,6 +29,8 @@ import {
   TemplateName,
   renderStoryboardFileEnhanced
 } from './index.js';
+import { printMusicRecommendations, generatePlaceholderAudio } from './music.js';
+import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -59,6 +61,12 @@ Storyboard Commands:
 Slide Commands:
   slide <template> <output>    Render a slide template to PNG
   slide list                   List available templates
+
+Audio Commands:
+  music                        Show royalty-free music sources
+  voice                        Show available voice options
+  voice list                   List system voices
+  narrate <text> <output>      Generate narration audio
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -505,6 +513,56 @@ async function main() {
       console.log('System check:');
       console.log(`  screencapture: available (macOS built-in)`);
       console.log(`  ffmpeg: ${hasFFmpeg() ? 'available' : 'NOT FOUND (install with: brew install ffmpeg)'}`);
+      break;
+    }
+
+    case 'music': {
+      const contentType = opts._positional as string;
+      printMusicRecommendations(contentType);
+      break;
+    }
+
+    case 'voice': {
+      const subCmd = opts._positional as string;
+
+      if (subCmd === 'list') {
+        const voices = getSystemVoices();
+        console.log('\nAvailable system voices:');
+        console.log('─'.repeat(40));
+        for (const voice of voices) {
+          console.log(`  ${voice}`);
+        }
+        console.log(`\nTotal: ${voices.length} voices`);
+      } else {
+        printVoiceOptions();
+      }
+      break;
+    }
+
+    case 'narrate': {
+      const text = opts._positional as string;
+      const output = opts._positional2 as string || 'narration.mp3';
+
+      if (!text) {
+        console.error('Usage: vif narrate "text to speak" output.mp3 [--voice NAME]');
+        process.exit(1);
+      }
+
+      const voice = opts.voice as string;
+      const provider = (opts.provider as string) || 'system';
+
+      console.log(`Generating narration...`);
+      const success = await generateNarration(text, output, {
+        provider: provider as any,
+        voice,
+      });
+
+      if (success) {
+        console.log(`Narration saved: ${output}`);
+      } else {
+        console.error('Narration failed');
+        process.exit(1);
+      }
       break;
     }
 

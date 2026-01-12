@@ -301,5 +301,7 @@ export declare function renderStoryboardFile(path: string, options?: {
 export * from './templates/index.js';
 export * from './slides.js';
 export * from './storyboard.js';
+export * from './music.js';
+export * from './voice.js';
 export type { ChildProcess };
 //# sourceMappingURL=index.d.ts.map
