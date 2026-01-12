@@ -5,10 +5,11 @@
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, unlinkSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, unlinkSync, readFileSync, writeFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { hasFFmpeg } from './index.js';
+import { generateCacheKey, getCachedPath, getOrFetch } from './cache.js';
 
 // ============================================================================
 // Types
@@ -395,6 +396,7 @@ function systemTTS(
 
 /**
  * Generate narration audio from text
+ * Uses vif's own cache to avoid re-generating expensive audio
  */
 export async function generateNarration(
   text: string,
@@ -414,15 +416,42 @@ export async function generateNarration(
     return false;
   }
 
-  // Use Speakeasy CLI for elevenlabs/openai (it's already configured)
+  // Generate cache key from text + provider + voice
+  const cacheKey = generateCacheKey(cleanText, { provider, voice: options.voice });
+
+  // Check vif's cache first
+  const cachedPath = getCachedPath(cacheKey);
+  if (cachedPath) {
+    // Copy from cache to output
+    copyFileSync(cachedPath, outputPath);
+    return true;
+  }
+
+  // Generate new audio
+  let success = false;
+
+  // Use Speakeasy CLI for elevenlabs/openai
   if (provider === 'elevenlabs' || provider === 'openai') {
-    const success = await speakeasyCLI(cleanText, outputPath, options);
-    if (success) return true;
-    console.warn(`Speakeasy ${provider} failed, falling back to system voice`);
+    success = await speakeasyCLI(cleanText, outputPath, options);
+    if (!success) {
+      console.warn(`Speakeasy ${provider} failed, falling back to system voice`);
+    }
   }
 
   // Fall back to system TTS
-  return systemTTS(cleanText, outputPath, options);
+  if (!success) {
+    success = systemTTS(cleanText, outputPath, options);
+  }
+
+  // Cache the result if successful
+  if (success && existsSync(outputPath)) {
+    try {
+      const { cacheFile } = await import('./cache.js');
+      cacheFile(outputPath, cleanText, { provider, voice: options.voice });
+    } catch {}
+  }
+
+  return success;
 }
 
 /**
