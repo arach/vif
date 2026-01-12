@@ -67,22 +67,223 @@ export const RECOMMENDED_VOICES = {
 };
 
 // ============================================================================
-// Speakeasy Integration
+// ElevenLabs API
+// ============================================================================
+
+const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
+
+// Popular ElevenLabs voices (premade)
+export const ELEVENLABS_VOICES = {
+  rachel: '21m00Tcm4TlvDq8ikWAM',
+  drew: '29vD33N1CtxCmqQRPOHJ',
+  clyde: '2EiwWnXFnvU5JabPnv8n',
+  paul: '5Q0t7uMcjvnagumLfvZi',
+  domi: 'AZnzlk1XvdvUeBnXmlld',
+  dave: 'CYw3kZ02Hs0563khs1Fj',
+  fin: 'D38z5RcWu1voky8WS1ja',
+  sarah: 'EXAVITQu4vr4xnSDxMaL',
+  antoni: 'ErXwobaYiN019PkySvjV',
+  thomas: 'GBv7mTt0atIp3Br8iCZE',
+  charlie: 'IKne3meq5aSn9XLyUdCD',
+  george: 'JBFqnCBsd6RMkjVDRZzb',
+  emily: 'LcfcDJNUP1GQjkzn1xUU',
+  elli: 'MF3mGyEYCl7XYWbV9V6O',
+  callum: 'N2lVS1w4EtoT3dr4eOWO',
+  patrick: 'ODq5zmih8GrVes37Dizd',
+  harry: 'SOYHLrjzK2X1ezoPC6cr',
+  liam: 'TX3LPaxmHKxFdv7VOQHJ',
+  dorothy: 'ThT5KcBeYPX3keUQqHPh',
+  josh: 'TxGEqnHWrfWFTfGW9XjX',
+  arnold: 'VR6AewLTigWG4xSOukaG',
+  charlotte: 'XB0fDUnXU5powFXDhCwa',
+  alice: 'Xb7hH8MSUJpSbSDYk0k2',
+  matilda: 'XrExE9yKIg1WjnnlVkGX',
+  james: 'ZQe5CZNOzWyzPSCn5a3c',
+  joseph: 'Zlb1dXrM653N07WRdFW3',
+  jessica: 'cgSgspJ2msm6clMCkdW9',
+  michael: 'flq6f7yk4E4fJM5XTYuZ',
+  ethan: 'g5CIjZEefAph4nQFvHAz',
+  chris: 'iP95p4xoKVk53GoZ742B',
+  brian: 'nPczCjzI2devNBz1zQrb',
+  daniel: 'onwK4e9ZLuTAKqWW03F9',
+  lily: 'pFZP5JQG7iQjIQuC4Bku',
+  bill: 'pqHfZKP75CvOlQylNhV4',
+  bella: 'EkK5I93jTn4sHxGEKpZ0',
+  nicole: 'piTKgcLEGmPE4e6mEKli',
+  adam: 'pNInz6obpgDQGcFmaJgB',
+  sam: 'yoZ06aMxZJJ28mfd3POQ',
+};
+
+/**
+ * Get ElevenLabs voice ID from name
+ */
+function getElevenLabsVoiceId(voice: string): string {
+  const lower = voice.toLowerCase();
+  return ELEVENLABS_VOICES[lower as keyof typeof ELEVENLABS_VOICES] || voice;
+}
+
+/**
+ * Generate speech using ElevenLabs API directly
+ */
+async function elevenlabsTTS(
+  text: string,
+  outputPath: string,
+  options: VoiceOptions
+): Promise<boolean> {
+  const apiKey = options.apiKey || process.env.ELEVENLABS_API_KEY;
+
+  if (!apiKey) {
+    console.warn('ELEVENLABS_API_KEY not set');
+    return false;
+  }
+
+  const voiceId = getElevenLabsVoiceId(options.voice || 'rachel');
+
+  try {
+    const response = await fetch(`${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_monolingual_v1',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('ElevenLabs API error:', error);
+      return false;
+    }
+
+    const buffer = await response.arrayBuffer();
+    writeFileSync(outputPath, Buffer.from(buffer));
+
+    return existsSync(outputPath);
+  } catch (error) {
+    console.error('ElevenLabs TTS failed:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// OpenAI TTS API
+// ============================================================================
+
+const OPENAI_TTS_URL = 'https://api.openai.com/v1/audio/speech';
+
+/**
+ * Generate speech using OpenAI TTS API
+ */
+async function openaiTTS(
+  text: string,
+  outputPath: string,
+  options: VoiceOptions
+): Promise<boolean> {
+  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    console.warn('OPENAI_API_KEY not set');
+    return false;
+  }
+
+  const voice = options.voice || 'alloy';
+
+  try {
+    const response = await fetch(OPENAI_TTS_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text,
+        voice,
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('OpenAI TTS API error:', error);
+      return false;
+    }
+
+    const buffer = await response.arrayBuffer();
+    writeFileSync(outputPath, Buffer.from(buffer));
+
+    return existsSync(outputPath);
+  } catch (error) {
+    console.error('OpenAI TTS failed:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// Speakeasy CLI Integration
 // ============================================================================
 
 /**
- * Check if Speakeasy is available
+ * Check if Speakeasy CLI is available
  */
 export function hasSpeakeasy(): boolean {
   try {
-    // Check if speakeasy npm package is importable
-    const result = spawnSync('node', ['-e', 'require("speakeasy")'], {
-      cwd: process.cwd(),
+    const result = spawnSync('which', ['speakeasy'], {
       encoding: 'utf-8',
       timeout: 5000,
     });
-    return result.status === 0;
+    return result.status === 0 && result.stdout.trim().length > 0;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate speech using Speakeasy CLI
+ */
+async function speakeasyCLI(
+  text: string,
+  outputPath: string,
+  options: VoiceOptions
+): Promise<boolean> {
+  const { provider = 'elevenlabs', voice } = options;
+
+  if (!hasSpeakeasy()) {
+    console.warn('Speakeasy CLI not found');
+    return false;
+  }
+
+  try {
+    // Build speakeasy command
+    const args = ['--provider', provider];
+    // For OpenAI, pass voice if specified; for ElevenLabs, let it use config default
+    if (voice && provider === 'openai') {
+      args.push('--voice', voice);
+    }
+    args.push('--out', outputPath);
+    args.push(text);
+
+    const result = spawnSync('speakeasy', args, {
+      encoding: 'utf-8',
+      timeout: 60000,
+    });
+
+    if (result.status !== 0) {
+      console.error('Speakeasy error:', result.stderr);
+      return false;
+    }
+
+    return existsSync(outputPath);
+  } catch (error) {
+    console.error('Speakeasy CLI failed:', error);
     return false;
   }
 }
@@ -213,11 +414,11 @@ export async function generateNarration(
     return false;
   }
 
-  // Try Speakeasy for non-system providers
-  if (provider !== 'system' && hasSpeakeasy()) {
-    const success = await speakeasyTTS(cleanText, outputPath, options);
+  // Use Speakeasy CLI for elevenlabs/openai (it's already configured)
+  if (provider === 'elevenlabs' || provider === 'openai') {
+    const success = await speakeasyCLI(cleanText, outputPath, options);
     if (success) return true;
-    console.warn('Speakeasy failed, falling back to system voice');
+    console.warn(`Speakeasy ${provider} failed, falling back to system voice`);
   }
 
   // Fall back to system TTS
@@ -287,8 +488,10 @@ export function printVoiceOptions(): void {
   console.log('OpenAI voices (requires API key):');
   console.log('  alloy, echo, fable, onyx, nova, shimmer\n');
 
-  console.log('ElevenLabs voices (requires API key):');
-  console.log('  See https://elevenlabs.io/voice-library\n');
+  console.log('ElevenLabs voices (requires ELEVENLABS_API_KEY):');
+  const elevenLabsNames = Object.keys(ELEVENLABS_VOICES);
+  console.log(`  Available: ${elevenLabsNames.slice(0, 12).join(', ')}...`);
+  console.log('  Popular: rachel, sarah, charlotte, emily, adam, josh\n');
 
   console.log('📁 Usage in storyboard:');
   console.log('   voice:');

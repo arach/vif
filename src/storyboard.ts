@@ -13,6 +13,7 @@ import YAML from 'yaml';
 import { renderSlide, closeBrowser } from './slides.js';
 import { templates, TemplateName } from './templates/index.js';
 import { screenshot, screenshotApp, hasFFmpeg } from './index.js';
+import { generateNarration as generateNarrationVoice, VoiceOptions } from './voice.js';
 
 // ============================================================================
 // Types
@@ -128,7 +129,7 @@ export interface RenderProgress {
 }
 
 // ============================================================================
-// Speakeasy Integration
+// Narration (delegates to voice.ts)
 // ============================================================================
 
 async function generateNarration(
@@ -136,54 +137,13 @@ async function generateNarration(
   outputPath: string,
   config?: VoiceConfig
 ): Promise<boolean> {
-  const provider = config?.provider || 'system';
-  const voice = config?.voice;
-  const rate = config?.rate || 180;
+  const voiceOptions: VoiceOptions = {
+    provider: config?.provider || 'system',
+    voice: config?.voice,
+    rate: config?.rate || 180,
+  };
 
-  try {
-    if (provider === 'system') {
-      // Use macOS say command
-      const voiceArg = voice ? `-v "${voice}"` : '';
-      const rateArg = `-r ${rate}`;
-      execSync(`say ${voiceArg} ${rateArg} -o "${outputPath}" --data-format=LEF32@22050 "${text}"`, {
-        timeout: 60000
-      });
-
-      // Convert AIFF to MP3 for easier handling
-      const mp3Path = outputPath.replace('.aiff', '.mp3');
-      if (hasFFmpeg()) {
-        execSync(`ffmpeg -y -i "${outputPath}" -acodec libmp3lame -b:a 192k "${mp3Path}"`, {
-          stdio: 'pipe'
-        });
-        unlinkSync(outputPath);
-        execSync(`mv "${mp3Path}" "${outputPath.replace('.aiff', '.mp3')}"`);
-      }
-      return true;
-    }
-
-    // For OpenAI/ElevenLabs, try to use Speakeasy if installed
-    try {
-      const speakeasyPath = execSync('which speakeasy || echo ""', { encoding: 'utf-8' }).trim();
-      if (speakeasyPath) {
-        execSync(`speakeasy --provider ${provider} ${voice ? `--voice ${voice}` : ''} --output "${outputPath}" "${text}"`, {
-          timeout: 60000
-        });
-        return true;
-      }
-    } catch {
-      // Speakeasy not available, fall back to system
-    }
-
-    // Fallback to system voice
-    execSync(`say -o "${outputPath}" --data-format=LEF32@22050 "${text}"`, {
-      timeout: 60000
-    });
-    return true;
-
-  } catch (error) {
-    console.error('Narration generation failed:', error);
-    return false;
-  }
+  return generateNarrationVoice(text, outputPath, voiceOptions);
 }
 
 // ============================================================================
