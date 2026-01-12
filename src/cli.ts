@@ -65,6 +65,8 @@ Slide Commands:
 
 Audio Commands:
   music                        Show royalty-free music sources
+  music browse                 Open music sites in browser
+  music generate <output>      Generate ambient placeholder music
   voice                        Show available voice options
   voice list                   List system voices
   narrate <text> <output>      Generate narration audio
@@ -522,8 +524,52 @@ async function main() {
     }
 
     case 'music': {
-      const contentType = opts._positional as string;
-      printMusicRecommendations(contentType);
+      const subCmd = opts._positional as string;
+
+      if (subCmd === 'browse') {
+        const { execSync } = await import('child_process');
+        console.log('\nOpening royalty-free music sources...\n');
+
+        const sources = [
+          { name: 'Mixkit', url: 'https://mixkit.co/free-stock-music/' },
+          { name: 'Pixabay', url: 'https://pixabay.com/music/' },
+          { name: 'Uppbeat', url: 'https://uppbeat.io/browse/music' },
+        ];
+
+        for (const source of sources) {
+          console.log(`  Opening ${source.name}...`);
+          execSync(`open "${source.url}"`, { stdio: 'pipe' });
+        }
+
+        console.log('\nDownload a track, then reference it in your storyboard:');
+        console.log('  music:');
+        console.log('    source: ./music/your-track.mp3');
+        console.log('    volume: 0.3\n');
+      } else if (subCmd === 'generate') {
+        const output = opts._positional2 as string || 'ambient.mp3';
+        const duration = parseInt(opts.duration as string) || 30;
+        const { execSync } = await import('child_process');
+
+        console.log(`Generating ${duration}s ambient track...`);
+        execSync(`ffmpeg -y \
+          -f lavfi -i "sine=f=130.81:d=${duration}" \
+          -f lavfi -i "sine=f=164.81:d=${duration}" \
+          -f lavfi -i "sine=f=196:d=${duration}" \
+          -f lavfi -i "sine=f=261.63:d=${duration}" \
+          -filter_complex "
+            [0:a]volume=0.12,tremolo=f=0.5:d=0.3[a];
+            [1:a]volume=0.10,tremolo=f=0.4:d=0.2[b];
+            [2:a]volume=0.08,tremolo=f=0.3:d=0.2[c];
+            [3:a]volume=0.06,tremolo=f=0.6:d=0.4[d];
+            [a][b][c][d]amix=inputs=4:duration=first,
+            lowpass=f=2000,
+            afade=t=in:d=3,
+            afade=t=out:st=${duration - 4}:d=4[out]" \
+          -map "[out]" -c:a libmp3lame -b:a 192k "${output}"`, { stdio: 'pipe' });
+        console.log(`Generated: ${output}`);
+      } else {
+        printMusicRecommendations(subCmd);
+      }
       break;
     }
 
