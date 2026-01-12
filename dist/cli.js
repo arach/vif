@@ -2,11 +2,13 @@
 /**
  * Vif CLI - Vivid screen capture for macOS
  */
+import { execSync } from 'child_process';
 import { screenshot, screenshotApp, screenshotFullscreen, startRecording, recordVideo, convertVideo, optimizeForWeb, videoToGif, activateApp, listWindows, hasFFmpeg, analyzeAudio, mixAudio, createTake, listTakes, revertTake, pruneTakes, renderStoryboardFile, renderSlide, closeBrowser, templates, renderStoryboardFileEnhanced } from './index.js';
 import { printMusicRecommendations } from './music.js';
 import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.js';
 import { printCacheInfo, clearCache } from './cache.js';
-import { startCursorTracking, saveCursorTrack } from './cursor.js';
+import { startCursorTracking, saveCursorTrack, applyCursorZoomPan } from './cursor.js';
+import { executeDemo, saveDemoRecording, hasCursorControl, toCursorTrack } from './automation.js';
 const args = process.argv.slice(2);
 const command = args[0];
 function printHelp() {
@@ -22,6 +24,8 @@ Capture Commands:
   record <output.mp4>          Start video recording (Ctrl+C to stop)
   record --duration <s> <out>  Record for specific duration
   record-demo <output.mp4>     Record with cursor tracking for demos
+  auto-demo <output.mp4>       Record + auto-apply zoom/pan effects
+  scripted-demo <out.mp4>      Run scripted cursor automation demo
 
 Processing Commands:
   convert <input> <output>     Convert/process video
@@ -252,6 +256,137 @@ async function main() {
                 }
             });
             await new Promise(() => { });
+            break;
+        }
+        case 'auto-demo': {
+            // End-to-end demo: record + track cursor + apply zoom/pan automatically
+            const output = opts._positional || 'auto-demo.mp4';
+            const zoom = parseFloat(opts.zoom) || 1.8;
+            const rawOutput = output.replace(/\.mp4$/, '-raw.mp4');
+            const cursorOutput = output.replace(/\.mp4$/, '-cursor.json');
+            console.log('Auto Demo Recording');
+            console.log('===================');
+            console.log(`Output: ${output}`);
+            console.log(`Zoom level: ${zoom}x`);
+            console.log('');
+            console.log('Move your mouse around to demonstrate.');
+            console.log('Press Ctrl+C to stop and apply zoom effects.\n');
+            // Start cursor tracking
+            const cursorTracker = startCursorTracking();
+            // Start recording
+            const recording = startRecording({
+                output: rawOutput,
+                audio: false
+            });
+            process.on('SIGINT', async () => {
+                console.log('\nStopping recording...');
+                try {
+                    // Stop cursor tracking
+                    const cursorTrack = cursorTracker.stop();
+                    saveCursorTrack(cursorTrack, cursorOutput);
+                    console.log(`Tracked ${cursorTrack.positions.length} cursor positions`);
+                    // Stop video recording
+                    await recording.stop();
+                    console.log(`Raw recording saved: ${rawOutput}`);
+                    // Apply zoom/pan effect
+                    console.log('\nApplying cursor-following zoom/pan...');
+                    const success = applyCursorZoomPan(rawOutput, output, cursorTrack, { enabled: true, zoom }
+                    // Resolution auto-detected from video
+                    );
+                    if (success) {
+                        console.log(`\nDone! Final video: ${output}`);
+                        console.log(`Cursor track: ${cursorOutput}`);
+                        // Open the result
+                        const { execSync } = await import('child_process');
+                        execSync(`open "${output}"`);
+                    }
+                    else {
+                        console.error('Zoom/pan effect failed, raw video available at:', rawOutput);
+                    }
+                    process.exit(0);
+                }
+                catch (error) {
+                    console.error('Failed:', error);
+                    process.exit(1);
+                }
+            });
+            await new Promise(() => { });
+            break;
+        }
+        case 'scripted-demo': {
+            // Run a scripted demo with cursor automation
+            const output = opts._positional || 'scripted-demo.mp4';
+            const zoom = parseFloat(opts.zoom) || 1.8;
+            const appName = opts.app;
+            if (!hasCursorControl()) {
+                console.error('Cursor control requires cliclick and accessibility permissions.');
+                console.error('Install: brew install cliclick');
+                console.error('Then grant accessibility permissions in System Preferences.');
+                process.exit(1);
+            }
+            console.log('Scripted Demo Recording');
+            console.log('=======================');
+            console.log(`Output: ${output}`);
+            if (appName)
+                console.log(`App: ${appName}`);
+            console.log('');
+            // Build demo script
+            const script = {
+                app: appName,
+                actions: [
+                    // Example demo script - move around and click
+                    { type: 'wait', duration: 1 },
+                    { type: 'move', to: { x: 200, y: 200 }, duration: 0.5 },
+                    { type: 'zoom', level: zoom, at: { x: 200, y: 200 } },
+                    { type: 'wait', duration: 0.5 },
+                    { type: 'click' },
+                    { type: 'wait', duration: 0.3 },
+                    { type: 'move', to: { x: 600, y: 300 }, duration: 0.8 },
+                    { type: 'zoom', level: zoom, at: { x: 600, y: 300 } },
+                    { type: 'wait', duration: 0.5 },
+                    { type: 'click' },
+                    { type: 'wait', duration: 0.3 },
+                    { type: 'move', to: { x: 400, y: 500 }, duration: 0.6 },
+                    { type: 'zoom', level: 1.0 }, // zoom out
+                    { type: 'wait', duration: 1 },
+                ],
+            };
+            const rawOutput = output.replace(/\.mp4$/, '-raw.mp4');
+            const basePath = output.replace(/\.mp4$/, '');
+            console.log('Starting screen recording...');
+            // Start recording
+            const recording = startRecording({
+                output: rawOutput,
+                audio: false,
+            });
+            // Small delay to ensure recording started
+            await new Promise(r => setTimeout(r, 500));
+            console.log('Executing demo script...');
+            try {
+                // Execute the demo
+                const demoRecording = await executeDemo(script);
+                // Save cursor track
+                saveDemoRecording(demoRecording, basePath);
+                console.log(`Tracked ${demoRecording.positions.length} cursor positions`);
+                // Stop recording
+                console.log('Stopping recording...');
+                await recording.stop();
+                console.log(`Raw recording saved: ${rawOutput}`);
+                // Apply zoom/pan based on recorded zoom track or cursor track
+                console.log('\nApplying zoom/pan effects...');
+                const success = applyCursorZoomPan(rawOutput, output, toCursorTrack(demoRecording), { enabled: true, zoom });
+                if (success) {
+                    console.log(`\nDone! Final video: ${output}`);
+                    execSync(`open "${output}"`);
+                }
+                else {
+                    console.error('Zoom/pan effect failed');
+                }
+            }
+            catch (error) {
+                console.error('Demo execution failed:', error);
+                await recording.stop();
+            }
             break;
         }
         case 'convert': {

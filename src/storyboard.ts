@@ -20,11 +20,14 @@ import {
   startCursorTracking,
   applyCursorOverlay,
   applyCursorZoomPan,
+  applyZoomSegments,
   generateDefaultCursor,
   CursorTrack,
   loadCursorTrack,
-  saveCursorTrack
+  saveCursorTrack,
+  ZoomSegment
 } from './cursor.js';
+import { applyViewport, parseViewportConfig, ViewportCommand } from './viewport.js';
 
 // ============================================================================
 // Types
@@ -105,6 +108,20 @@ export interface VideoBlock {
   speed?: number;
 }
 
+// ZoomSegment is imported from cursor.ts
+
+/** Viewport command for mouse-aware rendering */
+export interface ViewportCommandConfig {
+  follow?: 'mouse';
+  from?: number;
+  to?: number;
+  zoom?: number;
+  at?: number;
+  duration?: number;
+  center?: 'mouse' | { x: number; y: number };
+  pan?: 'mouse' | { x: number; y: number };
+}
+
 export interface RecordingBlock {
   type: 'recording';
   /** Pre-recorded video file path */
@@ -117,12 +134,16 @@ export interface RecordingBlock {
   speed?: number;
   /** Custom cursor configuration */
   cursor?: CursorConfig | boolean;
-  /** Cursor-following zoom/pan */
+  /** Cursor-following zoom/pan (simple mode) */
   zoomPan?: ZoomPanConfig | boolean;
-  /** Cursor track file (JSON with positions) */
+  /** Cursor track file (JSON with positions) - provides "mouse awareness" */
   cursorTrack?: string;
   /** Spotlight effect following cursor */
   spotlight?: boolean;
+  /** Manual zoom segments - zoom to specific areas at specific times */
+  zoomSegments?: ZoomSegment[];
+  /** Viewport commands - mouse-aware zoom/pan control */
+  viewport?: ViewportCommandConfig[];
 }
 
 export interface IntroBlock extends Omit<SlideBlock, 'type'> {
@@ -370,7 +391,26 @@ async function renderBlock(
         }
       }
 
-      // Step 5: Normalize to target resolution and fps
+      // Step 5: Apply manual zoom segments (overrides cursor zoom if both specified)
+      if (recBlock.zoomSegments && recBlock.zoomSegments.length > 0) {
+        const zoomSegVideo = join(tempRecDir, 'zoomseg.mp4');
+        applyZoomSegments(currentVideo, zoomSegVideo, recBlock.zoomSegments as ZoomSegment[], resolution);
+        if (existsSync(zoomSegVideo)) {
+          currentVideo = zoomSegVideo;
+        }
+      }
+
+      // Step 6: Apply viewport commands (mouse-aware zoom/pan)
+      if (recBlock.viewport && recBlock.viewport.length > 0 && cursorTrack) {
+        const viewportVideo = join(tempRecDir, 'viewport.mp4');
+        const viewportConfig = parseViewportConfig({ viewport: recBlock.viewport });
+        applyViewport(currentVideo, viewportVideo, cursorTrack, viewportConfig, resolution);
+        if (existsSync(viewportVideo)) {
+          currentVideo = viewportVideo;
+        }
+      }
+
+      // Step 7: Normalize to target resolution and fps
       const args: string[] = ['-y', '-i', currentVideo];
 
       if (recBlock.duration !== undefined) {

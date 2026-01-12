@@ -9,7 +9,8 @@
     "vif": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && swiftc src/mouse.swift -o dist/vif-mouse 2>/dev/null || true",
+    "build:swift": "swiftc src/mouse.swift -o dist/vif-mouse",
     "dev": "tsc --watch",
     "test": "node dist/test.js"
   },

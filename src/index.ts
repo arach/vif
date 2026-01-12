@@ -1203,5 +1203,11 @@ export * from './cache.js';
 // Export cursor module
 export * from './cursor.js';
 
+// Export viewport (mouse-aware rendering)
+export * from './viewport.js';
+
+// Export automation (cursor control)
+export * from './automation.js';
+
 // Export types
 export type { ChildProcess };
