@@ -6,11 +6,15 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Agent binary locations (in order of preference)
 const AGENT_PATHS = [
