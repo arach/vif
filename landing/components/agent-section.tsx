@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Bot, FileText, Puzzle, ExternalLink } from "lucide-react"
+import { Bot, FileText, Puzzle, ExternalLink, Code } from "lucide-react"
 import Link from "next/link"
 
 export default function AgentSection() {
@@ -20,7 +20,35 @@ export default function AgentSection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* INTEGRATION.md Card */}
+          <Link
+            href="https://github.com/arach/vif/blob/main/INTEGRATION.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative bg-white border border-slate-200 rounded-2xl p-6 hover:border-purple-300 hover:shadow-lg transition-all duration-200"
+          >
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-slate-100 rounded-xl group-hover:bg-purple-100 transition-colors">
+                <Code className="w-6 h-6 text-slate-600 group-hover:text-purple-600 transition-colors" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-display text-lg font-medium text-slate-900">Integration Guide</h3>
+                  <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-purple-500 transition-colors" />
+                </div>
+                <p className="text-sm text-slate-600 mb-3">
+                  Single source of truth for integrating your macOS app. VifTargets SDK, Swift code, coordinate conversion.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Swift SDK</span>
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">SwiftUI</span>
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Voice</span>
+                </div>
+              </div>
+            </div>
+          </Link>
+
           {/* AGENTS.md Card */}
           <Link
             href="https://github.com/arach/vif/blob/main/AGENTS.md"
@@ -38,12 +66,12 @@ export default function AgentSection() {
                   <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
                 </div>
                 <p className="text-sm text-slate-600 mb-3">
-                  Cross-agent compatible instructions. Works with Claude Code, Cursor, Copilot, Gemini CLI, and any AI coding agent.
+                  Cross-agent instructions for Claude Code, Cursor, Copilot, Gemini CLI, and any AI coding agent.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Setup commands</span>
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Setup</span>
                   <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Architecture</span>
-                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">DSL reference</span>
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">DSL</span>
                 </div>
               </div>
             </div>
@@ -66,12 +94,12 @@ export default function AgentSection() {
                   <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
                 </div>
                 <p className="text-sm text-slate-600 mb-3">
-                  Auto-discovered by Claude Code. Complete VifTargets SDK implementation, SwiftUI modifiers, and integration guide.
+                  Auto-discovered by Claude Code. Comprehensive VifTargets implementation guide.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Swift SDK</span>
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Auto-load</span>
                   <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Coordinates</span>
-                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Voice injection</span>
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">MCP</span>
                 </div>
               </div>
             </div>
@@ -101,17 +129,26 @@ export default function AgentSection() {
         </div>
 
         {/* Integration callout */}
-        <div className="mt-4 p-6 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200/50 rounded-2xl">
+        <div className="mt-4 p-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200/50 rounded-2xl">
           <div className="flex items-start gap-4">
-            <Bot className="w-6 h-6 text-emerald-600 mt-0.5" />
+            <Code className="w-6 h-6 text-purple-600 mt-0.5" />
             <div>
               <h4 className="font-medium text-slate-900 mb-1">Integrate your app with vif</h4>
               <p className="text-sm text-slate-600 mb-3">
-                Expose your app's UI elements via HTTP on port 7851. Navigation targets use the API, click targets use screen coordinates.
+                Two paths: use explicit coordinates for any app, or integrate the VifTargets SDK for dynamic UI element tracking.
               </p>
-              <code className="text-xs bg-white/80 px-3 py-1.5 rounded-lg font-mono text-slate-700 border border-slate-200">
-                curl http://localhost:7851/vif/targets | jq
-              </code>
+              <div className="flex flex-wrap items-center gap-3">
+                <code className="text-xs bg-white/80 px-3 py-1.5 rounded-lg font-mono text-slate-700 border border-slate-200">
+                  curl http://localhost:7851/vif/targets | jq
+                </code>
+                <Link
+                  href="https://github.com/arach/vif/blob/main/INTEGRATION.md"
+                  target="_blank"
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+                >
+                  Read the guide <ExternalLink className="w-3 h-3" />
+                </Link>
+              </div>
             </div>
           </div>
         </div>

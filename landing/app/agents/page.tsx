@@ -56,6 +56,15 @@ export default function AgentsPage() {
           </div>
           <div className="space-y-3 font-mono text-sm">
             <div className="flex items-start gap-3">
+              <span className="text-emerald-400 shrink-0">INTEGRATION.md</span>
+              <a
+                href="https://raw.githubusercontent.com/arach/vif/main/INTEGRATION.md"
+                className="text-blue-400 hover:text-blue-300 break-all"
+              >
+                https://raw.githubusercontent.com/arach/vif/main/INTEGRATION.md
+              </a>
+            </div>
+            <div className="flex items-start gap-3">
               <span className="text-emerald-400 shrink-0">AGENTS.md</span>
               <a
                 href="https://raw.githubusercontent.com/arach/vif/main/AGENTS.md"
@@ -77,7 +86,36 @@ export default function AgentsPage() {
         </div>
 
         {/* Main Cards */}
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
+        <div className="grid md:grid-cols-3 gap-6 mb-12">
+          {/* INTEGRATION.md Card */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-purple-100 rounded-xl">
+                <Code className="w-6 h-6 text-purple-600" />
+              </div>
+              <div>
+                <h2 className="font-display text-xl font-medium text-slate-900 mb-1">INTEGRATION.md</h2>
+                <p className="text-sm text-slate-500">Single source of truth</p>
+              </div>
+            </div>
+            <p className="text-slate-600 mb-4">
+              Complete guide for integrating your macOS app with vif. VifTargets SDK, Swift code, coordinate conversion.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Swift SDK</span>
+              <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">SwiftUI</span>
+              <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Coordinates</span>
+              <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">Voice</span>
+            </div>
+            <Link
+              href="https://github.com/arach/vif/blob/main/INTEGRATION.md"
+              target="_blank"
+              className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium text-sm"
+            >
+              View on GitHub <ExternalLink className="w-4 h-4" />
+            </Link>
+          </div>
+
           {/* AGENTS.md Card */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
             <div className="flex items-start gap-4 mb-4">
