@@ -217,6 +217,30 @@ export class VifAgent extends EventEmitter {
     await this.send({ action: 'typer.hide' });
   }
 
+  // ─── Input Commands (Real Keyboard) ─────────────────────────────
+
+  async inputType(text: string, delay = 0.03): Promise<void> {
+    await this.send({ action: 'input.type', text, delay });
+  }
+
+  async inputChar(char: string): Promise<void> {
+    await this.send({ action: 'input.char', char });
+  }
+
+  // ─── Voice Commands (Audio Playback through Virtual Mic) ─────────
+
+  async voicePlay(file: string): Promise<AgentResponse> {
+    return await this.send({ action: 'voice.play', file });
+  }
+
+  async voiceStop(): Promise<void> {
+    await this.send({ action: 'voice.stop' });
+  }
+
+  async voiceStatus(): Promise<AgentResponse> {
+    return await this.send({ action: 'voice.status' });
+  }
+
   // ─── Viewport Commands ────────────────────────────────────────────
 
   async viewportSet(x: number, y: number, width: number, height: number): Promise<void> {

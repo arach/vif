@@ -332,6 +332,10 @@ export class JsonRpcServer {
         return this.handleKeysCommand(id, method, cmd);
       case 'typer':
         return this.handleTyperCommand(id, method, cmd);
+      case 'input':
+        return this.handleInputCommand(id, method, cmd);
+      case 'voice':
+        return this.handleVoiceCommand(id, method, cmd);
       case 'viewport':
         return this.handleViewportCommand(id, method, cmd);
       case 'label':
@@ -439,6 +443,69 @@ export class JsonRpcServer {
 
       default:
         return { id, ok: false, error: `Unknown typer method: ${method}` };
+    }
+  }
+
+  private async handleInputCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'type': {
+        // Type actual text into focused field (real keyboard input)
+        const { text, delay = 0.03 } = cmd;
+        if (typeof text !== 'string') {
+          return { id, ok: false, error: 'input.type requires text string' };
+        }
+        await this.agent!.inputType(text, delay as number);
+        return { id, ok: true };
+      }
+
+      case 'char': {
+        // Type a single character
+        const { char } = cmd;
+        if (typeof char !== 'string' || char.length === 0) {
+          return { id, ok: false, error: 'input.char requires char string' };
+        }
+        await this.agent!.inputChar(char);
+        return { id, ok: true };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown input method: ${method}` };
+    }
+  }
+
+  private async handleVoiceCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'play': {
+        const { file } = cmd;
+        if (typeof file !== 'string') {
+          return { id, ok: false, error: 'voice.play requires file path' };
+        }
+        const result = await this.agent!.voicePlay(file);
+        return {
+          id,
+          ok: result.ok ?? true,
+          file,
+          duration: result.duration as number,
+          deviceIndex: result.deviceIndex as number,
+          error: result.error as string | undefined,
+        };
+      }
+
+      case 'stop':
+        await this.agent!.voiceStop();
+        return { id, ok: true };
+
+      case 'status': {
+        const result = await this.agent!.voiceStatus();
+        return {
+          id,
+          ok: true,
+          playing: result.playing as boolean,
+        };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown voice method: ${method}` };
     }
   }
 

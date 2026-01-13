@@ -1,35 +1,80 @@
-# Talkie Demo
-# Clean declarative navigation using SDK targets
+# Talkie Drafts Demo
+# Showcases the drafts feature: navigate, type, and use voice commands
 
 scene:
-  name: Talkie - Drafts Demo
+  name: Talkie - Drafts Feature Demo
   mode: draft
 
-app:
-  name: Talkie
-  window:
-    width: 1200
-    height: 800
-    center: true
+import:
+  - ./apps/talkie.yaml
 
 stage:
   backdrop: true
   viewport:
     padding: 10
 
+labels:
+  teleprompter:
+    position: top
+    style:
+      background: "rgba(0,0,0,0.9)"
+
 sequence:
-  - wait: 300ms
+  # Setup
+  - wait: 500ms
   - record: start
 
-  # Navigate to Drafts section - uses app's VifTargets server
-  - click: drafts
-  - wait: 800ms
+  # Show teleprompter with scene info
+  - label: teleprompter
+    text: "Talkie Drafts: Quick text editing with AI"
 
+  - wait: 800ms
   - cursor.show: {}
 
-  # Move cursor around in the content area
-  - cursor.moveTo: { x: 600, y: 400, duration: 0.5 }
-  - wait: 400ms
+  # Navigate to Drafts in sidebar (uses nav API automatically)
+  - label.update: "Navigate to Drafts section"
+  - click: sidebar.drafts
+  - wait: 800ms
+
+  # Click into the text editor area (use DemoKit anchor if available)
+  - label.update: "Click the text editor to start writing"
+  - click: drafts-text-editor
+  - wait: 500ms
+
+  # Type actual text into the text editor
+  - label.update: "Start composing your message"
+  - input.type:
+      text: "Hey team, quick update on the project status. We've made great progress this week."
+      delay: 0.025
+
+  - wait: 800ms
+
+  # Click the voice command button to START recording
+  - label.update: "Use voice to refine your text with AI"
+  - click: drafts-voice-btn
+  - wait: 1000ms  # Wait for audio capture to fully initialize
+
+  # Inject voice command through BlackHole virtual mic (while recording is active)
+  - label.update: "Speaking: \"Make this more professional and add action items\""
+  - voice.play:
+      file: ../audio/test-voice.wav
+      wait: true
+  - wait: 300ms  # Brief pause after voice finishes
+
+  # Click voice button again to STOP recording and trigger transcription
+  - label.update: "Processing voice command..."
+  - click: drafts-voice-btn
+  - wait: 4000ms  # Wait for transcription and AI processing
+
+  # Click copy button (use DemoKit anchor)
+  - label.update: "Copy the refined text"
+  - click: drafts-copy-btn
+  - wait: 600ms
+
+  # Cleanup
+  - label.update: "Done! Text copied to clipboard"
+  - wait: 1000ms
 
   - cursor.hide: {}
+  - label.hide: {}
   - record: stop

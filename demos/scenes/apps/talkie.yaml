@@ -10,16 +10,37 @@ app:
     center: true
 
 views:
+  # Sidebar items (order: Home, Memos, Dictations, Drafts, then sections)
+  # Each row is ~32px, header is ~50px from top
   sidebar:
     region: { x: 0, width: 200 }
     items:
-      - home: { x: 110, y: 120 }
-      - drafts: { x: 110, y: 160 }
-      - all-memos: { x: 110, y: 200 }
-      - workflows: { x: 110, y: 320 }
+      - home: { x: 100, y: 82 }         # 1st item
+      - memos: { x: 100, y: 114 }       # 2nd item (was all-memos)
+      - dictations: { x: 100, y: 146 }  # 3rd item
+      - drafts: { x: 100, y: 178 }      # 4th item
+      # Activity section (has header)
+      - actions: { x: 100, y: 238 }     # 5th item (after section header)
+      - pending: { x: 100, y: 270 }     # 6th item
+      # Tools section (has header)
+      - stats: { x: 100, y: 330 }       # 7th item
+      - workflows: { x: 100, y: 362 }   # 8th item
+      - models: { x: 100, y: 394 }      # 9th item
+      - logs: { x: 100, y: 426 }        # 10th item
 
   content:
     region: { x: 200, width: stretch }
     positions:
       center: { x: 50%, y: 50% }
       top: { x: 50%, y: 100 }
+
+  # Drafts/ScratchPad view targets
+  drafts:
+    region: { x: 200, width: stretch }
+    items:
+      - text-editor: { x: 400, y: 280 }       # Main text editor area
+      - dictation-pill: { x: 500, y: 430 }    # Floating dictation button
+      - voice-btn: { x: 65, y: 545 }          # Voice command button (action bar)
+      - copy-btn: { x: 720, y: 545 }          # Copy to clipboard button
+      - model-picker: { x: 250, y: 150 }      # Model selector dropdown
+      - clear-btn: { x: 720, y: 150 }         # Clear text button

@@ -49,6 +49,8 @@ import Cocoa
 import Carbon.HIToolbox
 import ApplicationServices
 import WebKit
+import AVFoundation
+import CoreAudio
 
 // MARK: - Accessibility Check
 
@@ -132,6 +134,31 @@ func pressKeys(_ keys: [String]) {
     if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) {
         keyUp.flags = modifiers
         keyUp.post(tap: .cghidEventTap)
+    }
+}
+
+/// Type a string character by character using CGEvents
+func typeString(_ text: String, delay: UInt32 = 30000) {
+    let source = CGEventSource(stateID: .hidSystemState)
+
+    for char in text {
+        // Create key event for the character
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {
+            // Use UniChar for the character
+            var unichar = UniChar(char.utf16.first ?? 0)
+            keyDown.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unichar)
+            keyDown.post(tap: .cghidEventTap)
+        }
+
+        usleep(delay / 2)
+
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
+            var unichar = UniChar(char.utf16.first ?? 0)
+            keyUp.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unichar)
+            keyUp.post(tap: .cghidEventTap)
+        }
+
+        usleep(delay / 2)
     }
 }
 
@@ -1747,6 +1774,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handleKeys(cmd, json)
         case "typer":
             handleTyper(cmd, json)
+        case "input":
+            handleInput(cmd, json)
         case "viewport":
             handleViewport(cmd, json)
         case "stage":
@@ -1755,6 +1784,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handleLabel(cmd, json)
         case "record":
             handleRecord(cmd, json)
+        case "voice":
+            handleVoice(cmd, json)
         default:
             if action == "quit" {
                 respond(["ok": true])
@@ -1831,6 +1862,26 @@ class VifAgent: NSObject, NSApplicationDelegate {
             typerWindow.hideTyper()
         default:
             respond(["ok": false, "error": "unknown typer cmd: \(cmd)"])
+            return
+        }
+        respond(["ok": true])
+    }
+
+    func handleInput(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "type":
+            // Type actual text into the focused field
+            if let text = json["text"] as? String {
+                let delay = UInt32((json["delay"] as? Double ?? 0.03) * 1000000)
+                typeString(text, delay: delay)
+            }
+        case "char":
+            // Type a single character
+            if let char = json["char"] as? String, !char.isEmpty {
+                typeString(String(char.first!), delay: 10000)
+            }
+        default:
+            respond(["ok": false, "error": "unknown input cmd: \(cmd)"])
             return
         }
         respond(["ok": true])
@@ -2036,6 +2087,128 @@ class VifAgent: NSObject, NSApplicationDelegate {
         default:
             respond(["ok": false, "error": "unknown record cmd: \(cmd)"])
         }
+    }
+
+    // MARK: - Voice (Audio Playback through BlackHole)
+
+    private var voiceProcess: Process?
+
+    func handleVoice(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "play":
+            guard let file = json["file"] as? String else {
+                respond(["ok": false, "error": "voice.play requires file"])
+                return
+            }
+
+            // Expand ~ in path
+            let expandedPath = NSString(string: file).expandingTildeInPath
+
+            // Check file exists
+            guard FileManager.default.fileExists(atPath: expandedPath) else {
+                respond(["ok": false, "error": "Audio file not found: \(file)"])
+                return
+            }
+
+            // Find BlackHole device index
+            let deviceIndex = findBlackHoleDeviceIndex() ?? 1  // Default to 1
+
+            // Stop any existing playback
+            voiceProcess?.terminate()
+            voiceProcess = nil
+
+            // Play audio through BlackHole using ffmpeg (outputs to audiotoolbox device)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+            process.arguments = [
+                "-i", expandedPath,      // Input file
+                "-hide_banner",          // Less output
+                "-loglevel", "error",
+                "-f", "audiotoolbox",    // Output format
+                "-audio_device_index", String(deviceIndex),
+                "-"                      // Output to pipe (required for audiotoolbox)
+            ]
+
+            // Capture stderr
+            let pipe = Pipe()
+            process.standardError = pipe
+            process.standardOutput = FileHandle.nullDevice
+
+            do {
+                try process.run()
+                voiceProcess = process
+
+                // Get audio duration for response
+                let duration = getAudioDuration(expandedPath)
+
+                fputs("[agent] voice: playing \(file) → BlackHole (device \(deviceIndex))\n", stderr)
+                respond(["ok": true, "file": file, "duration": duration, "deviceIndex": deviceIndex])
+            } catch {
+                respond(["ok": false, "error": "Failed to play: \(error.localizedDescription)"])
+            }
+
+        case "stop":
+            if let process = voiceProcess, process.isRunning {
+                process.terminate()
+                voiceProcess = nil
+                fputs("[agent] voice: stopped\n", stderr)
+            }
+            respond(["ok": true])
+
+        case "status":
+            let playing = voiceProcess?.isRunning ?? false
+            respond(["ok": true, "playing": playing])
+
+        default:
+            respond(["ok": false, "error": "unknown voice cmd: \(cmd)"])
+        }
+    }
+
+    /// Find BlackHole audio device index by name
+    func findBlackHoleDeviceIndex() -> Int? {
+        // Use ffmpeg to list devices and find BlackHole
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        process.arguments = ["-f", "avfoundation", "-list_devices", "true", "-i", ""]
+
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8) {
+                // Parse output to find BlackHole
+                let lines = output.components(separatedBy: "\n")
+                var inAudioSection = false
+                for line in lines {
+                    if line.contains("AVFoundation audio devices") {
+                        inAudioSection = true
+                        continue
+                    }
+                    if inAudioSection && line.contains("BlackHole") {
+                        // Extract device index from "[0]" or "[1]" etc
+                        if let match = line.range(of: #"\[(\d+)\]"#, options: .regularExpression) {
+                            let indexStr = line[match].dropFirst().dropLast()
+                            return Int(indexStr)
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Fall through to default
+        }
+        return nil
+    }
+
+    /// Get audio file duration in seconds
+    func getAudioDuration(_ path: String) -> Double {
+        let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+        let duration = CMTimeGetSeconds(asset.duration)
+        return duration.isNaN ? 0 : duration
     }
 
     func respond(_ dict: [String: Any]) {

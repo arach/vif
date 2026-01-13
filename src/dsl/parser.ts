@@ -81,6 +81,19 @@ export interface LabelUpdateAction { 'label.update': string }
 export interface LabelHideAction { 'label.hide': true | {} }
 export interface UseAction { use: string }
 
+// Typer actions (visual typing overlay)
+export interface TyperTypeAction { 'typer.type': { text: string; style?: 'default' | 'terminal' | 'code' | 'input'; delay?: number } }
+export interface TyperHideAction { 'typer.hide': true | {} }
+export interface TyperClearAction { 'typer.clear': true | {} }
+
+// Input actions (actual keyboard input)
+export interface InputTypeAction { 'input.type': { text: string; delay?: number } }
+export interface InputKeysAction { 'input.keys': string[] }
+
+// Voice actions (audio playback through virtual mic)
+export interface VoicePlayAction { 'voice.play': { file: string; wait?: boolean } | string }
+export interface VoiceStopAction { 'voice.stop': true | {} }
+
 export type Action =
   | CursorShowAction
   | CursorHideAction
@@ -93,7 +106,14 @@ export type Action =
   | LabelAction
   | LabelUpdateAction
   | LabelHideAction
-  | UseAction;
+  | UseAction
+  | TyperTypeAction
+  | TyperHideAction
+  | TyperClearAction
+  | InputTypeAction
+  | InputKeysAction
+  | VoicePlayAction
+  | VoiceStopAction;
 
 export interface SceneFile {
   scene: Scene;
