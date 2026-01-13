@@ -118,3 +118,12 @@ Apps expose UI elements via HTTP on port 7851:
 - `src/agent/main.swift` - macOS automation commands
 - `demos/scenes/` - Example scene files
 - `demos/scenes/apps/` - App definition files
+
+## Detailed Integration Guide
+
+For comprehensive VifTargets SDK implementation (Swift code, SwiftUI modifiers, coordinate conversion, voice injection setup), see:
+
+- **Claude Code users**: `.claude/skills/vif/SKILL.md` (auto-discovered)
+- **All agents**: `docs/vif-targets-integration.md`
+
+These guides include complete Swift implementations, coordinate system conversion, and troubleshooting.
