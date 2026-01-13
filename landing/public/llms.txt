@@ -21,9 +21,9 @@ Keyboard: `Escape` exits headless, `⌃⌥⌘V` toggles headless, `⇧⌘X` clea
 
 ## Docs
 
+- [INTEGRATION.md](https://raw.githubusercontent.com/arach/vif/main/INTEGRATION.md): **Single source of truth** - VifTargets SDK, Swift code, coordinate conversion, voice injection
 - [AGENTS.md](https://raw.githubusercontent.com/arach/vif/main/AGENTS.md): Cross-agent instructions - setup, architecture, DSL reference
-- [Claude Skill](https://raw.githubusercontent.com/arach/vif/main/.claude/skills/vif/SKILL.md): Comprehensive VifTargets SDK implementation guide
-- [Integration Guide](https://raw.githubusercontent.com/arach/vif/main/docs/vif-targets-integration.md): Human-readable integration documentation
+- [Claude Skill](https://raw.githubusercontent.com/arach/vif/main/.claude/skills/vif/SKILL.md): Auto-discovered by Claude Code
 
 ## API
 

@@ -4,7 +4,7 @@
 
 ![Vif OG](landing/public/og-image.png)
 
-Screen capture built for AI agents and LLMs. Declarative storyboards, CLI-native, everything is a file.
+Screen capture built for AI agents and LLMs. Declarative scenes, CLI-native, everything is a file.
 
 ## Features
 
@@ -45,19 +45,21 @@ vif shot --app Safari safari.png
 # Record video (Ctrl+C to stop)
 vif record demo.mp4
 
-# Render a storyboard
-vif render storyboard.yaml
+# Play a scene (declarative demo automation)
+vif play scene.yaml
 ```
 
 ## Agentic Control
 
-Control vif programmatically for AI agent integration:
+Control vif programmatically for AI agent integration.
+
+> **Note:** Start the server first with `vif serve` — all vif-ctl commands require it.
 
 ```bash
-# Start the automation server
+# Start the automation server (required for vif-ctl)
 vif serve
 
-# Control via vif-ctl CLI
+# Control via vif-ctl CLI (in another terminal)
 vif-ctl backdrop on                    # Show dark backdrop
 vif-ctl cursor show                    # Show animated cursor
 vif-ctl cursor move 500 300 0.5        # Move cursor with animation
@@ -80,29 +82,72 @@ vif-ctl panel headless off             # Disable headless mode
 vif-mcp  # Start MCP server for native tool access
 ```
 
-## Storyboards
+## Scenes
 
-Define video sequences declaratively in YAML:
+Define demo sequences declaratively in YAML:
 
 ```yaml
-name: product-demo
-output: demo.mp4
-audio:
-  file: music.mp3
-  volume: 0.7
-  fadeOut: 2
+scene:
+  name: My App Demo
+  mode: draft    # 'draft' for iteration, 'final' for production
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
 sequence:
-  - source: intro.mp4
-    duration: 3
-  - source: features.mp4
-    transition: crossfade
+  - wait: 500ms
+  - record: start
+  - label.show: "Welcome to the demo"
+  - cursor.show: {}
+  - click: sidebar.home           # Click named target
+  - click: { x: 500, y: 300 }     # Or explicit coordinates
+  - input.type:
+      text: "Hello world"
+      delay: 0.03
+  - record: stop
 ```
 
-Then render:
+Then play:
 
 ```bash
-vif render storyboard.yaml
+vif play demo.yaml              # Run the scene
+vif play --validate demo.yaml   # Validate without running
+vif play --watch demo.yaml      # Re-run on file changes
 ```
+
+### Using Without SDK (Coordinate Mode)
+
+You can automate **any** macOS app using explicit coordinates — no SDK integration required:
+
+```yaml
+scene:
+  name: Finder Demo
+  mode: draft
+
+stage:
+  backdrop: true
+
+sequence:
+  - wait: 500ms
+  - cursor.show: {}
+  - cursor.moveTo: { x: 100, y: 200, duration: 0.3 }
+  - cursor.click: {}
+  - input.type:
+      text: "Hello"
+      delay: 0.03
+  - keys.show:
+      keys: ["cmd", "c"]
+      press: true
+```
+
+**Finding coordinates:**
+1. Use `vif-ctl cursor show` to display the cursor
+2. Move your mouse to the target position
+3. Note the coordinates from the control panel
+
+For apps you control, integrate the **VifTargets SDK** for semantic target names instead of coordinates. See [Integration Guide](INTEGRATION.md).
 
 ## CLI Usage
 
@@ -195,12 +240,38 @@ convertVideo({
 });
 ```
 
-## Requirements
+## Prerequisites
 
-- macOS (uses `screencapture` which is built-in)
-- Node.js 18+
-- Swift (for window discovery - comes with Xcode Command Line Tools)
-- ffmpeg (optional, for video processing): `brew install ffmpeg`
+### System Requirements
+- **macOS** (uses built-in `screencapture`)
+- **Node.js 18+**
+- **Xcode Command Line Tools** (for Swift): `xcode-select --install`
+- **ffmpeg** (optional, for video processing): `brew install ffmpeg`
+
+### Required Permissions
+
+Grant these in **System Settings → Privacy & Security**:
+
+| Permission | Required For | How to Grant |
+|------------|--------------|--------------|
+| **Screen Recording** | Screenshots, video capture | Add Terminal (or your IDE) |
+| **Accessibility** | Mouse/keyboard automation | Add Terminal (or your IDE) |
+
+### Optional Setup
+
+For **voice injection** (playing audio through virtual mic):
+```bash
+brew install blackhole-2ch
+```
+Then set BlackHole as your app's audio input device.
+
+### Verify Installation
+```bash
+vif check              # Check system capabilities
+vif windows            # Verify window discovery works
+vif serve &            # Start server (required for vif-ctl)
+vif-ctl cursor show    # Test automation
+```
 
 ## API Reference
 
