@@ -1,0 +1,33 @@
+# Simple Test Scene
+# Tests basic DSL functionality with Finder
+
+scene:
+  name: Simple Test
+  mode: draft
+
+app:
+  name: Finder
+  window:
+    width: 800
+    height: 600
+    center: true
+
+stage:
+  backdrop: true
+  viewport:
+    app: auto
+    padding: 10
+
+sequence:
+  - record: start
+  - cursor.show: {}
+  - cursor.moveTo: { x: 100, y: 150, duration: 0.4 }
+  - wait: 500ms
+  - cursor.click: {}
+  - wait: 300ms
+  - cursor.moveTo: { x: 100, y: 200, duration: 0.3 }
+  - cursor.click: {}
+  - wait: 500ms
+  - cursor.moveTo: { x: 400, y: 300, duration: 0.5 }
+  - cursor.hide: {}
+  - record: stop

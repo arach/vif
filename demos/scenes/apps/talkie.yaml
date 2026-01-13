@@ -1,0 +1,25 @@
+# Talkie App Definition
+# Defines views and clickable targets for the Talkie app
+
+app:
+  type: native
+  name: Talkie
+  window:
+    width: 1200
+    height: 800
+    center: true
+
+views:
+  sidebar:
+    region: { x: 0, width: 200 }
+    items:
+      - home: { x: 110, y: 120 }
+      - drafts: { x: 110, y: 160 }
+      - all-memos: { x: 110, y: 200 }
+      - workflows: { x: 110, y: 320 }
+
+  content:
+    region: { x: 200, width: stretch }
+    positions:
+      center: { x: 50%, y: 50% }
+      top: { x: 50%, y: 100 }

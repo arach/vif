@@ -36,6 +36,7 @@ import { printCacheInfo, clearCache, getCacheStats } from './cache.js';
 import { startCursorTracking, saveCursorTrack, applyCursorZoomPan, CURSOR_COLORS } from './cursor.js';
 import { executeDemo, saveDemoRecording, hasCursorControl, DemoScript, DemoAction, toCursorTrack } from './automation.js';
 import { startServer } from './server.js';
+import { runScene, SceneParser } from './dsl/index.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -61,6 +62,11 @@ Processing Commands:
   gif <input> <output.gif>     Convert video to GIF
   optimize <input> <output>    Optimize video for web
   mix <video> <audio> <out>    Add audio track to video
+
+Scene Commands (Declarative DSL):
+  play <scene.yaml>            Run a declarative scene file
+  play --validate <scene.yaml> Validate without running
+  play --watch <scene.yaml>    Re-run on file changes
 
 Storyboard Commands:
   render <storyboard.yaml>     Render a storyboard to video
@@ -888,6 +894,74 @@ async function main() {
         await new Promise(() => {}); // Keep alive
       } catch (err) {
         console.error('Failed to start server:', err);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'play': {
+      const sceneFile = opts._positional as string;
+
+      if (!sceneFile) {
+        console.error('Usage: vif play <scene.yaml> [--verbose] [--validate] [--watch]');
+        process.exit(1);
+      }
+
+      const verbose = opts.verbose === true || opts.v === true;
+      const validate = opts.validate === true;
+      const watch = opts.watch === true;
+
+      if (validate) {
+        // Validate only - parse and report
+        console.log(`Validating: ${sceneFile}`);
+        try {
+          const parser = new SceneParser();
+          const scene = parser.parseFile(sceneFile);
+          console.log(`✓ Valid scene: "${scene.scene.name}"`);
+          console.log(`  Actions: ${scene.sequence.length}`);
+          console.log(`  Views: ${scene.views.size}`);
+          console.log(`  Labels: ${scene.labels.size}`);
+        } catch (err: any) {
+          console.error(`✗ Invalid: ${err.message}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      if (watch) {
+        // Watch mode - re-run on file changes
+        const { watch: watchFile } = await import('fs');
+        console.log(`Watching: ${sceneFile}`);
+        console.log('Press Ctrl+C to stop.\n');
+
+        const runOnce = async () => {
+          try {
+            await runScene(sceneFile, { verbose });
+          } catch (err: any) {
+            console.error(`Error: ${err.message}`);
+          }
+        };
+
+        // Initial run
+        await runOnce();
+
+        // Watch for changes
+        watchFile(sceneFile, async (eventType) => {
+          if (eventType === 'change') {
+            console.log('\n--- File changed, re-running ---\n');
+            await runOnce();
+          }
+        });
+
+        await new Promise(() => {}); // Keep alive
+        break;
+      }
+
+      // Normal run
+      try {
+        await runScene(sceneFile, { verbose });
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
         process.exit(1);
       }
       break;

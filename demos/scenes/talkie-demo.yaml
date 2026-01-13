@@ -1,0 +1,43 @@
+# Talkie Navigation Demo
+# Demonstrates sidebar navigation with semantic targets
+
+scene:
+  name: Talkie Navigation Demo
+  mode: draft
+
+import:
+  - ./apps/talkie.yaml
+
+stage:
+  backdrop: gradient
+  viewport:
+    app: talkie
+    padding: 10
+
+labels:
+  teleprompter:
+    position: bottom
+    style:
+      background: "rgba(0,0,0,0.9)"
+
+sequence:
+  - record: start
+
+  - cursor.show: {}
+
+  # Navigate through sidebar items
+  - navigate:
+      through: sidebar
+      items: [home, drafts, all-memos, workflows]
+      wait: 600ms
+
+  # Click in content area
+  - click: content.center
+  - wait: 500ms
+
+  # Back to drafts
+  - click: sidebar.drafts
+
+  - cursor.hide: {}
+
+  - record: stop
