@@ -20,13 +20,15 @@ stage:
 sequence:
   - wait: 300ms
   - record: start
+
+  # Navigate to Drafts section - uses app's VifTargets server
+  - click: drafts
+  - wait: 800ms
+
   - cursor.show: {}
 
-  # Click targets by identifier - vif queries Talkie for coordinates
-  - click: sidebar.drafts
-  - wait: 600ms
-
-  - click: content.center
+  # Move cursor around in the content area
+  - cursor.moveTo: { x: 600, y: 400, duration: 0.5 }
   - wait: 400ms
 
   - cursor.hide: {}

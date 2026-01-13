@@ -258,9 +258,15 @@ export class SceneRunner {
         await this.send('cursor.moveTo', { x: coords.x, y: coords.y, duration: 0.3 });
         await this.send('cursor.click');
       } else if (typeof target === 'string') {
-        // Try app targets first (from SDK integration)
-        if (this.appTargets[target]) {
-          const appTarget = this.appTargets[target];
+        // Check if it's a navigation target (nav.xxx)
+        const navTarget = this.appTargets[`nav.${target}`] || this.appTargets[target];
+        if (navTarget && (navTarget as any).type === 'navigate') {
+          // Use navigation instead of clicking
+          this.log(`🧭 Navigating to: ${target}`);
+          await this.navigateToSection((navTarget as any).section || target);
+        } else if (this.appTargets[target] && typeof (this.appTargets[target] as any).x === 'number') {
+          // Click target with coordinates
+          const appTarget = this.appTargets[target] as { x: number; y: number };
           this.log(`📍 Using app target: ${target} → (${appTarget.x}, ${appTarget.y})`);
           await this.send('cursor.moveTo', { x: appTarget.x, y: appTarget.y, duration: 0.3 });
           await this.send('cursor.click');
@@ -437,6 +443,27 @@ export class SceneRunner {
     }
 
     return { x: position.x, y: position.y };
+  }
+
+  /**
+   * Navigate to a section via HTTP POST to app's VifTargets server
+   */
+  private async navigateToSection(section: string): Promise<void> {
+    const port = 7851; // VifTargets default port
+    try {
+      const response = await fetch(`http://localhost:${port}/vif/navigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ section }),
+      });
+      if (!response.ok) {
+        this.log(`⚠ Navigation failed: HTTP ${response.status}`);
+      }
+    } catch (err) {
+      this.log(`⚠ Navigation failed: ${err}`);
+    }
+    // Small delay to let UI update
+    await this.sleep(300);
   }
 
   /**
