@@ -154,10 +154,11 @@ export class SceneParser {
     // Process imports
     const views = new Map<string, View>();
     const labels = new Map<string, LabelDef>();
+    const appRef: { app?: App } = { app: data.app };
 
     if (data.import) {
       for (const importPath of data.import) {
-        this.processImport(importPath, views, labels);
+        this.processImport(importPath, views, labels, appRef);
       }
     }
 
@@ -181,7 +182,7 @@ export class SceneParser {
 
     return {
       scene: data.scene,
-      app: data.app,
+      app: appRef.app,
       stage,
       views,
       labels,
@@ -196,7 +197,8 @@ export class SceneParser {
   private processImport(
     importPath: string,
     views: Map<string, View>,
-    labels: Map<string, LabelDef>
+    labels: Map<string, LabelDef>,
+    appRef: { app?: App }
   ): void {
     const fullPath = resolve(this.basePath, importPath);
 
@@ -206,6 +208,11 @@ export class SceneParser {
 
     const content = readFileSync(fullPath, 'utf-8');
     const data = YAML.parse(content);
+
+    // Import app definition (if not already set)
+    if (data.app && !appRef.app) {
+      appRef.app = data.app;
+    }
 
     // Import views
     if (data.views) {

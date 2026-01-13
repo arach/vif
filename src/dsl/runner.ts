@@ -12,6 +12,7 @@ import {
   View,
   LabelDef
 } from './parser.js';
+import { resolveTarget, TargetRegistry, queryAppTargets } from './targets.js';
 
 export interface RunnerOptions {
   port?: number;
@@ -25,6 +26,7 @@ export class SceneRunner {
   private scene: ParsedScene;
   private options: RunnerOptions;
   private appBounds: { x: number; y: number; width: number; height: number } | null = null;
+  private appTargets: TargetRegistry = {};
 
   constructor(scene: ParsedScene, options: RunnerOptions = {}) {
     this.scene = scene;
@@ -198,6 +200,17 @@ export class SceneRunner {
         await this.send('viewport.set', vp);
         await this.send('viewport.show');
       }
+
+      // Query app for registered targets (if app exposes them)
+      try {
+        this.appTargets = await queryAppTargets(app.name);
+        const targetCount = Object.keys(this.appTargets).length;
+        if (targetCount > 0) {
+          this.log(`📍 Loaded ${targetCount} targets from ${app.name}`);
+        }
+      } catch {
+        // App doesn't expose targets - that's ok
+      }
     }
   }
 
@@ -235,18 +248,28 @@ export class SceneRunner {
       return;
     }
 
-    // click (supports both coordinates and view references)
+    // click (supports coordinates, app targets, and view references)
     if ('click' in action) {
       const target = action.click;
 
       if (typeof target === 'object' && 'x' in target) {
+        // Explicit coordinates
         const coords = this.resolveCoordinates(target.x, target.y);
         await this.send('cursor.moveTo', { x: coords.x, y: coords.y, duration: 0.3 });
         await this.send('cursor.click');
       } else if (typeof target === 'string') {
-        const coords = this.resolveViewTarget(target);
-        await this.send('cursor.moveTo', { x: coords.x, y: coords.y, duration: 0.3 });
-        await this.send('cursor.click');
+        // Try app targets first (from SDK integration)
+        if (this.appTargets[target]) {
+          const appTarget = this.appTargets[target];
+          this.log(`📍 Using app target: ${target} → (${appTarget.x}, ${appTarget.y})`);
+          await this.send('cursor.moveTo', { x: appTarget.x, y: appTarget.y, duration: 0.3 });
+          await this.send('cursor.click');
+        } else {
+          // Fall back to view references defined in scene
+          const coords = this.resolveViewTarget(target);
+          await this.send('cursor.moveTo', { x: coords.x, y: coords.y, duration: 0.3 });
+          await this.send('cursor.click');
+        }
       }
       return;
     }

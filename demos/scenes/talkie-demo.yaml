@@ -1,5 +1,5 @@
 # Talkie Navigation Demo
-# Demonstrates sidebar navigation with semantic targets
+# Demonstrates sidebar navigation with semantic targets and teleprompter
 
 scene:
   name: Talkie Navigation Demo
@@ -16,28 +16,41 @@ stage:
 
 labels:
   teleprompter:
-    position: bottom
+    position: top
     style:
       background: "rgba(0,0,0,0.9)"
 
 sequence:
+  # Show teleprompter with scene info
+  - label: teleprompter
+    text: "Scene 1: Navigate the sidebar"
+
+  - wait: 1s
+
   - record: start
 
   - cursor.show: {}
 
   # Navigate through sidebar items
+  - label.update: "Click through each sidebar item..."
+
   - navigate:
       through: sidebar
       items: [home, drafts, all-memos, workflows]
       wait: 600ms
 
   # Click in content area
+  - label.update: "Now click in the content area"
   - click: content.center
   - wait: 500ms
 
   # Back to drafts
+  - label.update: "Return to drafts"
   - click: sidebar.drafts
+  - wait: 300ms
 
   - cursor.hide: {}
 
   - record: stop
+
+  - label.hide: {}

@@ -1064,6 +1064,15 @@ class BackdropWindow: NSWindow {
 func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> Bool {
     guard let screen = NSScreen.main else { return false }
 
+    // First activate the app (idempotent - won't launch duplicates)
+    let activateScript = "tell application \"\(appName)\" to activate"
+    if let scriptObj = NSAppleScript(source: activateScript) {
+        var error: NSDictionary?
+        scriptObj.executeAndReturnError(&error)
+        // Small delay to let app come to front
+        Thread.sleep(forTimeInterval: 0.2)
+    }
+
     let script: String
     if let w = width, let h = height {
         let x = Int((screen.frame.width - w) / 2)

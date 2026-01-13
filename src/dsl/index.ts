@@ -18,3 +18,6 @@ export type {
 
 export { SceneRunner, runScene } from './runner.js';
 export type { RunnerOptions } from './runner.js';
+
+export { queryAppTargets, resolveTarget, appHasTargets } from './targets.js';
+export type { Target, TargetRegistry } from './targets.js';

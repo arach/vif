@@ -1,0 +1,33 @@
+# Talkie Demo
+# Clean declarative navigation using SDK targets
+
+scene:
+  name: Talkie - Drafts Demo
+  mode: draft
+
+app:
+  name: Talkie
+  window:
+    width: 1200
+    height: 800
+    center: true
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+sequence:
+  - wait: 300ms
+  - record: start
+  - cursor.show: {}
+
+  # Click targets by identifier - vif queries Talkie for coordinates
+  - click: sidebar.drafts
+  - wait: 600ms
+
+  - click: content.center
+  - wait: 400ms
+
+  - cursor.hide: {}
+  - record: stop
