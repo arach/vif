@@ -78,8 +78,30 @@ export default function AgentSection() {
           </Link>
         </div>
 
+        {/* Agentic Control callout */}
+        <div className="mt-8 p-6 bg-gradient-to-r from-slate-50 to-emerald-50 border border-slate-200/50 rounded-2xl">
+          <div className="flex items-start gap-4">
+            <Bot className="w-6 h-6 text-slate-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-slate-900 mb-1">Programmatic Control</h4>
+              <p className="text-sm text-slate-600 mb-3">
+                Control vif imperatively with <code className="font-mono text-xs bg-white/80 px-1.5 py-0.5 rounded border border-slate-200">vif-ctl</code> CLI
+                or the <code className="font-mono text-xs bg-white/80 px-1.5 py-0.5 rounded border border-slate-200">vif-mcp</code> MCP server for Claude.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <code className="text-xs bg-white/80 px-2 py-1 rounded font-mono text-slate-600 border border-slate-200">vif-ctl cursor move 500 300</code>
+                <code className="text-xs bg-white/80 px-2 py-1 rounded font-mono text-slate-600 border border-slate-200">vif-ctl panel headless on</code>
+              </div>
+              <p className="text-xs text-slate-500">
+                Keyboard: <kbd className="px-1.5 py-0.5 bg-white rounded border text-[10px]">Escape</kbd> exits headless,
+                <kbd className="px-1.5 py-0.5 bg-white rounded border text-[10px] ml-1">⌃⌥⌘V</kbd> toggles headless
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Integration callout */}
-        <div className="mt-8 p-6 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200/50 rounded-2xl">
+        <div className="mt-4 p-6 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200/50 rounded-2xl">
           <div className="flex items-start gap-4">
             <Bot className="w-6 h-6 text-emerald-600 mt-0.5" />
             <div>

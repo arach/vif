@@ -4,6 +4,21 @@
 
 Vif automates demo recordings by connecting to your app via HTTP (VifTargets SDK), querying available UI targets, and executing scene sequences (click, type, navigate, voice). It's designed for agentic workflows where AI assistants iterate on video production through natural conversation.
 
+## Agentic Control
+
+For programmatic control without YAML scenes:
+
+```bash
+vif serve                           # Start automation server
+vif-ctl backdrop on                 # Show backdrop
+vif-ctl cursor move 500 300 0.5     # Move cursor
+vif-ctl label show "Demo text"      # Show label
+vif-ctl panel headless on           # Enter headless mode
+vif-mcp                             # MCP server for Claude
+```
+
+Keyboard: `Escape` exits headless, `⌃⌥⌘V` toggles headless, `⇧⌘X` clears stage.
+
 ## Docs
 
 - [AGENTS.md](https://raw.githubusercontent.com/arach/vif/main/AGENTS.md): Cross-agent instructions - setup, architecture, DSL reference
@@ -12,6 +27,8 @@ Vif automates demo recordings by connecting to your app via HTTP (VifTargets SDK
 
 ## API
 
+- [vif-ctl CLI](https://github.com/arach/vif/blob/main/src/ctl.ts): Imperative control CLI
+- [MCP Server](https://github.com/arach/vif/blob/main/src/mcp/server.ts): Model Context Protocol server
 - [Scene DSL Parser](https://github.com/arach/vif/blob/main/src/dsl/parser.ts): YAML scene types and parsing
 - [Scene Runner](https://github.com/arach/vif/blob/main/src/dsl/runner.ts): Scene execution logic
 - [Swift Agent](https://github.com/arach/vif/blob/main/src/agent/main.swift): macOS automation commands

@@ -9,12 +9,14 @@ Screen capture built for AI agents and LLMs. Declarative storyboards, CLI-native
 ## Features
 
 - **Agent-First**: Designed for LLM tool use with predictable, parseable output
-- **Declarative Storyboards**: Define video sequences in YAML
+- **Declarative Scenes**: Define demo sequences in YAML with the Scene DSL
+- **Agentic Control**: `vif-ctl` CLI and MCP server for AI agent integration
+- **Live Control Panel**: Expandable layer viewer showing active stage elements
+- **Headless Mode**: Full immersive recording without UI overlay
 - **Window Discovery**: Find windows by app name with precise window IDs
 - **Screenshot Capture**: Capture windows, regions, or fullscreen
 - **Video Recording**: Record screen with optional audio
 - **Video Processing**: Convert, optimize, and create GIFs (requires ffmpeg)
-- **Take Management**: Iterate on captures with automatic versioning
 
 ## Installation
 
@@ -45,6 +47,37 @@ vif record demo.mp4
 
 # Render a storyboard
 vif render storyboard.yaml
+```
+
+## Agentic Control
+
+Control vif programmatically for AI agent integration:
+
+```bash
+# Start the automation server
+vif serve
+
+# Control via vif-ctl CLI
+vif-ctl backdrop on                    # Show dark backdrop
+vif-ctl cursor show                    # Show animated cursor
+vif-ctl cursor move 500 300 0.5        # Move cursor with animation
+vif-ctl label show "Recording demo"    # Show teleprompter label
+vif-ctl stage clear                    # Clear all overlays
+
+# Headless mode (hide control panel for immersive recording)
+vif-ctl panel headless on              # Enable headless mode
+vif-ctl panel headless off             # Disable headless mode
+```
+
+**Keyboard Shortcuts:**
+- `Escape` — Exit headless mode + clear all overlays
+- `⌃⌥⌘V` — Toggle headless mode
+- `⇧⌘R` — Stop recording
+- `⇧⌘X` — Clear stage
+
+**MCP Server** for Claude and AI agents:
+```bash
+vif-mcp  # Start MCP server for native tool access
 ```
 
 ## Storyboards

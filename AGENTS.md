@@ -38,19 +38,51 @@ pnpm build && pnpm build:agent
 ./dist/cli.js play demos/scenes/your-scene.yaml
 ```
 
+## Agentic Control
+
+For programmatic/imperative control (not YAML scenes):
+
+```bash
+# Start automation server
+vif serve
+
+# Control via vif-ctl CLI
+vif-ctl backdrop on                 # Show backdrop
+vif-ctl cursor show                 # Show cursor
+vif-ctl cursor move 500 300 0.5     # Move cursor
+vif-ctl label show "Demo text"      # Show label
+vif-ctl stage clear                 # Clear all
+
+# Headless mode (hide control panel)
+vif-ctl panel headless on           # Enter headless
+vif-ctl panel headless off          # Exit headless
+
+# MCP server for Claude/AI agents
+vif-mcp
+```
+
+**Keyboard Shortcuts:**
+- `Escape` — Exit headless + clear all
+- `⌃⌥⌘V` — Toggle headless mode
+- `⇧⌘R` — Stop recording
+- `⇧⌘X` — Clear stage
+
 ## Architecture
 
 ```
 src/
 ├── cli.ts           # CLI entry point
-├── server.ts        # WebSocket server for browser connection
+├── ctl.ts           # vif-ctl imperative CLI
+├── server.ts        # WebSocket server for agent communication
 ├── agent-client.ts  # Communicates with Swift agent
+├── mcp/
+│   └── server.ts    # MCP server for AI agents
 ├── dsl/
 │   ├── parser.ts    # YAML scene parser
 │   ├── runner.ts    # Executes scene sequences
 │   └── targets.ts   # Target resolution
 └── agent/
-    └── main.swift   # macOS automation agent (AppleScript, accessibility)
+    └── main.swift   # macOS automation agent (overlays, automation)
 ```
 
 **Key components:**
