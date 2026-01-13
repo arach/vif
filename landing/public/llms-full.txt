@@ -1,0 +1,270 @@
+# Vif
+
+> Declarative screen capture and demo automation for macOS. Built for AI agents and LLMs.
+
+## Project Overview
+
+Vif is a CLI tool and library for creating automated demo recordings. It provides:
+
+- **Declarative DSL**: Define demo sequences in YAML scene files
+- **App automation**: Click, type, navigate through apps
+- **Screen capture**: Record video, screenshots
+- **Voice injection**: Play audio through virtual microphones for voice-enabled app demos
+- **VifTargets SDK**: Protocol for apps to expose their UI elements for automation
+
+## Setup Commands
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build TypeScript
+pnpm build
+
+# Build Swift agent (required for automation)
+pnpm build:agent
+```
+
+## Build and Test
+
+```bash
+# Build everything
+pnpm build && pnpm build:agent
+
+# Run the CLI
+./dist/cli.js --help
+
+# Run a demo scene
+./dist/cli.js play demos/scenes/your-scene.yaml
+```
+
+## Architecture
+
+```
+src/
+├── cli.ts           # CLI entry point
+├── server.ts        # WebSocket server for browser connection
+├── agent-client.ts  # Communicates with Swift agent
+├── dsl/
+│   ├── parser.ts    # YAML scene parser
+│   ├── runner.ts    # Executes scene sequences
+│   └── targets.ts   # Target resolution
+└── agent/
+    └── main.swift   # macOS automation agent (AppleScript, accessibility)
+```
+
+**Key components:**
+- **Server** (`server.ts`): Hosts WebSocket for browser-based recording UI
+- **Agent** (`agent/main.swift`): Swift process that executes macOS automation
+- **Runner** (`dsl/runner.ts`): Interprets scene YAML and dispatches actions
+
+## Scene DSL Reference
+
+Scenes are YAML files that define automated demo sequences:
+
+```yaml
+scene:
+  name: Demo Name
+  mode: draft  # or 'final'
+
+# Import app definitions
+import:
+  - ./apps/myapp.yaml
+
+# Stage configuration
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+# Demo sequence
+sequence:
+  - wait: 500ms
+  - record: start
+  - click: sidebar.home          # Navigation target (uses HTTP API)
+  - click: save-button           # Click target (uses coordinates)
+  - input.type:                  # Type text
+      text: "Hello world"
+      delay: 0.03
+  - voice.play: ./audio/cmd.wav  # Play audio through virtual mic
+  - record: stop
+```
+
+### Action Reference
+
+**Navigation & Clicks:**
+```yaml
+- click: nav.settings        # Navigation target (HTTP API)
+- click: save-button         # Click target (coordinates)
+- click: { x: 100, y: 200 }  # Explicit coordinates
+```
+
+**Text Input:**
+```yaml
+- input.type:
+    text: "Text to type"
+    delay: 0.03              # Delay between chars (seconds)
+```
+
+**Voice Injection:**
+```yaml
+- voice.play: ./audio/cmd.wav    # Simple
+- voice.play:                    # With options
+    file: ./audio/cmd.wav
+    wait: true                   # Wait for playback to finish
+```
+
+**Recording:**
+```yaml
+- record: start
+- record: stop
+```
+
+**Labels:**
+```yaml
+- label: teleprompter
+  text: "Step description"
+- label.update: "New text"
+- label.hide: {}
+```
+
+**Timing:**
+```yaml
+- wait: 500ms
+- wait: 2s
+- wait: 1000      # milliseconds if no unit
+```
+
+## App Integration (VifTargets SDK)
+
+Apps expose UI elements via HTTP on port 7851:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/vif/targets` | GET | Returns all navigation and click targets |
+| `/vif/navigate` | POST | Triggers navigation (body: `{"section": "name"}`) |
+| `/vif/state` | GET | Returns current app state |
+
+### Target Types
+
+**Navigation Targets:**
+```json
+{
+  "nav.home": { "type": "navigate", "section": "home" },
+  "nav.settings": { "type": "navigate", "section": "settings" }
+}
+```
+
+**Click Targets:**
+```json
+{
+  "save-button": { "x": 450, "y": 320, "type": "click" },
+  "text-editor": { "x": 600, "y": 400, "type": "click" }
+}
+```
+
+### Minimal VifTargets.swift Implementation
+
+```swift
+import Cocoa
+import Network
+
+public class VifTargets {
+    public static let shared = VifTargets()
+
+    private var clickTargets: [String: () -> NSPoint?] = [:]
+    private var listener: NWListener?
+    private let port: UInt16 = 7851
+
+    public func start() {
+        let params = NWParameters.tcp
+        params.allowLocalEndpointReuse = true
+        listener = try? NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+        listener?.newConnectionHandler = { [weak self] conn in
+            self?.handleConnection(conn)
+        }
+        listener?.start(queue: .main)
+    }
+
+    public func register(_ id: String, provider: @escaping () -> NSPoint?) {
+        clickTargets[id] = provider
+    }
+
+    // Handle GET /vif/targets, POST /vif/navigate, GET /vif/state
+    private func handleConnection(_ connection: NWConnection) {
+        // ... HTTP request handling
+    }
+}
+```
+
+### SwiftUI View Modifier
+
+```swift
+extension View {
+    public func vifTarget(_ identifier: String) -> some View {
+        modifier(VifTargetModifier(identifier: identifier))
+    }
+}
+
+// Usage:
+Button("Save") { ... }
+    .vifTarget("save-button")
+```
+
+### Coordinate System Conversion
+
+macOS coordinate systems:
+- **SwiftUI .global**: Window-relative, top-left origin
+- **Cocoa NSWindow**: Screen-relative, bottom-left origin
+- **vif/screencapture**: Screen-relative, top-left origin
+
+```swift
+func convertToScreenCoordinates(frame: CGRect) -> NSPoint? {
+    guard let window = NSApp.mainWindow,
+          let screen = window.screen else { return nil }
+
+    let windowFrame = window.frame
+    let screenX = windowFrame.origin.x + frame.midX
+    let windowTopY = windowFrame.origin.y + windowFrame.height
+    let cocoaY = windowTopY - frame.midY
+    let vifY = screen.frame.height - cocoaY
+
+    return NSPoint(x: screenX, y: vifY)
+}
+```
+
+## Voice Injection Setup
+
+For apps with voice input, use BlackHole virtual audio device:
+
+1. Install: `brew install blackhole-2ch`
+2. Configure app to use user's selected microphone
+3. User selects "BlackHole 2ch" as input
+4. vif plays audio through BlackHole → app receives as mic input
+
+## Testing Integration
+
+```bash
+# Check targets
+curl http://localhost:7851/vif/targets | jq
+
+# Test navigation
+curl -X POST http://localhost:7851/vif/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"section": "settings"}'
+
+# Check state
+curl http://localhost:7851/vif/state | jq
+```
+
+## Code Style
+
+- TypeScript with strict mode
+- Use `pnpm` for package management
+- Gitmoji in commit messages (✨ features, 🐛 bugs, 📝 docs)
+- No co-author footers in commits
+
+## Repository
+
+- GitHub: https://github.com/arach/vif
+- npm: https://www.npmjs.com/package/@arach/vif

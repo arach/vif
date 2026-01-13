@@ -1,0 +1,27 @@
+# Vif
+
+> Declarative screen capture and demo automation for macOS. Built for AI agents and LLMs. Define demo sequences in YAML, automate app interactions, record videos.
+
+Vif automates demo recordings by connecting to your app via HTTP (VifTargets SDK), querying available UI targets, and executing scene sequences (click, type, navigate, voice). It's designed for agentic workflows where AI assistants iterate on video production through natural conversation.
+
+## Docs
+
+- [AGENTS.md](https://raw.githubusercontent.com/arach/vif/main/AGENTS.md): Cross-agent instructions - setup, architecture, DSL reference
+- [Claude Skill](https://raw.githubusercontent.com/arach/vif/main/.claude/skills/vif/SKILL.md): Comprehensive VifTargets SDK implementation guide
+- [Integration Guide](https://raw.githubusercontent.com/arach/vif/main/docs/vif-targets-integration.md): Human-readable integration documentation
+
+## API
+
+- [Scene DSL Parser](https://github.com/arach/vif/blob/main/src/dsl/parser.ts): YAML scene types and parsing
+- [Scene Runner](https://github.com/arach/vif/blob/main/src/dsl/runner.ts): Scene execution logic
+- [Swift Agent](https://github.com/arach/vif/blob/main/src/agent/main.swift): macOS automation commands
+
+## Examples
+
+- [Talkie Demo Scene](https://github.com/arach/vif/blob/main/demos/scenes/talkie-simple.yaml): Full demo with navigation, typing, voice injection
+- [App Definition](https://github.com/arach/vif/blob/main/demos/scenes/apps/talkie.yaml): App configuration example
+
+## Optional
+
+- [README](https://raw.githubusercontent.com/arach/vif/main/README.md): Full project documentation
+- [npm Package](https://www.npmjs.com/package/@arach/vif): Published package
