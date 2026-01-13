@@ -141,32 +141,38 @@ class CursorView: NSView {
     var showRipple = false
     var isDragging = false
 
+    // Use flipped coordinates (y=0 at top, like screen coords)
+    override var isFlipped: Bool { true }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
-        // Ripple effect
+        // Tip is at (0, 0) - top-left corner of view
+        let tipX: CGFloat = 0
+        let tipY: CGFloat = 0
+
+        // Ripple effect at cursor tip
         if showRipple && ripplePhase > 0 {
             let size: CGFloat = 50 * ripplePhase
-            let rect = CGRect(x: bounds.midX - size/2, y: bounds.midY - size/2 + 16, width: size, height: size)
+            let rect = CGRect(x: tipX - size/2, y: tipY - size/2, width: size, height: size)
             ctx.setFillColor(NSColor.systemBlue.withAlphaComponent(0.5 * (1.0 - ripplePhase)).cgColor)
             ctx.fillEllipse(in: rect)
         }
 
-        // Drag indicator
+        // Drag indicator at cursor tip
         if isDragging {
             let size: CGFloat = 30
-            let rect = CGRect(x: bounds.midX - size/2, y: bounds.midY - size/2 + 16, width: size, height: size)
+            let rect = CGRect(x: tipX - size/2, y: tipY - size/2, width: size, height: size)
             ctx.setFillColor(NSColor.systemOrange.withAlphaComponent(0.4).cgColor)
             ctx.fillEllipse(in: rect)
         }
 
-        // Cursor
+        // Cursor - tip at (0, 0)
         ctx.saveGState()
-        ctx.translateBy(x: bounds.midX - 12, y: bounds.midY)
 
         // Shadow
         ctx.saveGState()
-        ctx.translateBy(x: 2, y: -2)
+        ctx.translateBy(x: 2, y: 2)
         drawCursor(ctx, fill: NSColor.black.withAlphaComponent(0.25))
         ctx.restoreGState()
 
@@ -187,13 +193,15 @@ class CursorView: NSView {
     }
 
     func cursorPath(_ ctx: CGContext) {
-        ctx.move(to: CGPoint(x: 0, y: 32))
-        ctx.addLine(to: CGPoint(x: 0, y: 5))
-        ctx.addLine(to: CGPoint(x: 5, y: 11))
-        ctx.addLine(to: CGPoint(x: 9, y: 0))
-        ctx.addLine(to: CGPoint(x: 14, y: 3))
-        ctx.addLine(to: CGPoint(x: 10, y: 14))
-        ctx.addLine(to: CGPoint(x: 17, y: 14))
+        // macOS-style pointer cursor with tip at (0,0)
+        // In flipped coords: y increases downward
+        ctx.move(to: CGPoint(x: 0, y: 0))       // Tip at origin
+        ctx.addLine(to: CGPoint(x: 0, y: 26))   // Down left edge
+        ctx.addLine(to: CGPoint(x: 6, y: 20))   // Notch
+        ctx.addLine(to: CGPoint(x: 10, y: 30))  // Down to tail
+        ctx.addLine(to: CGPoint(x: 15, y: 27))  // Tail right
+        ctx.addLine(to: CGPoint(x: 11, y: 17))  // Back up
+        ctx.addLine(to: CGPoint(x: 18, y: 17))  // Right arrow part
         ctx.closePath()
     }
 
@@ -324,11 +332,21 @@ class CursorWindow: NSWindow {
     var isDragging = false
     var originalMousePosition: CGPoint?  // Store real cursor position on show
 
+    // Invisible 1x1 cursor as fallback when CGDisplayHideCursor doesn't work
+    static let invisibleCursor: NSCursor = {
+        let image = NSImage(size: NSSize(width: 1, height: 1))
+        image.lockFocus()
+        NSColor.clear.set()
+        NSRect(x: 0, y: 0, width: 1, height: 1).fill()
+        image.unlockFocus()
+        return NSCursor(image: image, hotSpot: NSPoint(x: 0, y: 0))
+    }()
+
     init() {
         super.init(contentRect: NSRect(x: 400, y: 400, width: 80, height: 80), styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        level = .popUpMenu  // Higher than .floating to ensure visibility
+        level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)  // Above everything including screen savers
         ignoresMouseEvents = true
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -339,16 +357,22 @@ class CursorWindow: NSWindow {
 
     func moveTo(x: CGFloat, y: CGFloat, duration: Double) {
         guard let screen = NSScreen.main else {
-            fputs("cursor: no screen\\n", stderr)
+            fputs("cursor: no screen\n", stderr)
             return
         }
         let oldPos = logicalPosition
         logicalPosition = CGPoint(x: x, y: y)
-        let cocoaY = screen.frame.height - y - 40
-        let origin = CGPoint(x: x - 40, y: cocoaY)
 
-        // Debug output
-        fputs("cursor: moveTo vif=(\(Int(x)),\(Int(y))) → cocoa=(\(Int(origin.x)),\(Int(origin.y))) screen=\(Int(screen.frame.height))\n", stderr)
+        // Position window so cursor tip (at top-left of window) aligns with screen coord (x, y)
+        // - Screen coords: y=0 at top, increases downward
+        // - Cocoa coords: y=0 at bottom, increases upward
+        // - setFrameOrigin sets the BOTTOM-LEFT corner of window
+        // - Cursor tip is at TOP-LEFT (0,0 in flipped view)
+        // Formula: tipCocoaY = screenHeight - y, windowOriginY = tipCocoaY - windowHeight
+        let realMouseTarget = CGPoint(x: x, y: y)
+        let windowHeight: CGFloat = 80
+        let cocoaY = screen.frame.height - y - windowHeight
+        let origin = CGPoint(x: x, y: cocoaY)
 
         if duration > 0 {
             // Use timer-based animation for reliable cursor movement
@@ -363,18 +387,25 @@ class CursorWindow: NSWindow {
                 let newX = startOrigin.x + (origin.x - startOrigin.x) * eased
                 let newY = startOrigin.y + (origin.y - startOrigin.y) * eased
 
+                // Interpolate real mouse position
+                let mouseX = oldPos.x + (x - oldPos.x) * eased
+                let mouseY = oldPos.y + (y - oldPos.y) * eased
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i)) {
+                    // Move overlay window
                     self.setFrameOrigin(CGPoint(x: newX, y: newY))
+                    // Move real mouse (source of truth for clicks)
+                    CGWarpMouseCursorPosition(CGPoint(x: mouseX, y: mouseY))
+
                     if self.isDragging {
-                        let ix = oldPos.x + (x - oldPos.x) * eased
-                        let iy = oldPos.y + (y - oldPos.y) * eased
-                        self.postDrag(at: CGPoint(x: ix, y: iy))
+                        self.postDrag(at: CGPoint(x: mouseX, y: mouseY))
                     }
                 }
             }
         } else {
             setFrameOrigin(origin)
-            if isDragging { postDrag(at: logicalPosition) }
+            CGWarpMouseCursorPosition(realMouseTarget)
+            if isDragging { postDrag(at: realMouseTarget) }
         }
     }
 
@@ -382,10 +413,17 @@ class CursorWindow: NSWindow {
         CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
     }
 
+    // Get current mouse position (the source of truth)
+    var mousePosition: CGPoint {
+        let event = CGEvent(source: nil)
+        return event?.location ?? .zero
+    }
+
     func click() {
         cursorView.animateClick()
-        let p = logicalPosition
+        // Click at current mouse position (source of truth)
         DispatchQueue.global().async {
+            let p = self.mousePosition
             CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
             usleep(50000)
             CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
@@ -394,8 +432,8 @@ class CursorWindow: NSWindow {
 
     func doubleClick() {
         cursorView.animateClick()
-        let p = logicalPosition
         DispatchQueue.global().async {
+            let p = self.mousePosition
             for n in 1...2 {
                 let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)
                 down?.setIntegerValueField(.mouseEventClickState, value: Int64(n))
@@ -411,8 +449,8 @@ class CursorWindow: NSWindow {
 
     func rightClick() {
         cursorView.animateClick()
-        let p = logicalPosition
         DispatchQueue.global().async {
+            let p = self.mousePosition
             CGEvent(mouseEventSource: nil, mouseType: .rightMouseDown, mouseCursorPosition: p, mouseButton: .right)?.post(tap: .cghidEventTap)
             usleep(50000)
             CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp, mouseCursorPosition: p, mouseButton: .right)?.post(tap: .cghidEventTap)
@@ -423,7 +461,7 @@ class CursorWindow: NSWindow {
         isDragging = true
         cursorView.isDragging = true
         cursorView.needsDisplay = true
-        CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: logicalPosition, mouseButton: .left)?.post(tap: .cghidEventTap)
+        CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: mousePosition, mouseButton: .left)?.post(tap: .cghidEventTap)
     }
 
     func dragEnd() {
@@ -436,13 +474,31 @@ class CursorWindow: NSWindow {
     func showCursor() {
         // Store the current mouse position so we can restore it later
         originalMousePosition = NSEvent.mouseLocation
-        orderFrontRegardless()
+
+        // Hide system cursor BEFORE showing our window (multiple methods for reliability)
+        // 1. Dissociate mouse from cursor - prevents CGWarpMouseCursorPosition from re-showing cursor
+        CGAssociateMouseAndMouseCursorPosition(0)
+        // 2. Hide via CoreGraphics (system-wide)
+        CGDisplayHideCursor(CGMainDisplayID())
+        // 3. Hide via AppKit
         NSCursor.hide()
+        // 4. Push invisible cursor as fallback (in case other methods fail)
+        CursorWindow.invisibleCursor.push()
+
+        // Now show our synthetic cursor window
+        orderFrontRegardless()
     }
 
     func hideCursor() {
         orderOut(nil)
+
+        // Pop the invisible cursor
+        NSCursor.pop()
+        // Re-associate mouse and cursor
+        CGAssociateMouseAndMouseCursorPosition(1)
+        // Show system cursor again
         NSCursor.unhide()
+        CGDisplayShowCursor(CGMainDisplayID())
 
         // Restore mouse to original position
         if let original = originalMousePosition, let screen = NSScreen.main {
@@ -698,42 +754,50 @@ class ViewportMaskView: NSView {
     }
 }
 
-// MARK: - Scene Indicator Window
+// MARK: - Control Panel Window
 
-class SceneIndicatorWindow: NSWindow {
-    let indicatorView = SceneIndicatorView()
+class ControlPanelWindow: NSWindow {
+    let panelView = ControlPanelView()
+    var onDismiss: (() -> Void)?
 
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 90, height: 32), styleMask: .borderless, backing: .buffered, defer: false)
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 140, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        level = .floating
-        ignoresMouseEvents = true
+        level = .popUpMenu
+        ignoresMouseEvents = false  // Allow clicks for X button
         hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        indicatorView.frame = NSRect(x: 0, y: 0, width: 90, height: 32)
-        contentView = indicatorView
+        panelView.frame = NSRect(x: 0, y: 0, width: 140, height: 60)
+        panelView.onCloseClick = { [weak self] in
+            self?.onDismiss?()
+        }
+        contentView = panelView
         alphaValue = 0
 
         // Position in top-right corner
+        positionInTopRight()
+    }
+
+    func positionInTopRight() {
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 100
-            let y = screen.visibleFrame.maxY - 42
+            let x = screen.visibleFrame.maxX - 150
+            let y = screen.visibleFrame.maxY - 70
             setFrameOrigin(NSPoint(x: x, y: y))
         }
     }
 
-    func showIndicator() {
+    func showPanel() {
+        positionInTopRight()
         orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             animator().alphaValue = 1.0
         }
-        indicatorView.startPulsing()
     }
 
-    func hideIndicator() {
-        indicatorView.stopPulsing()
+    func hidePanel() {
+        panelView.setRecording(false)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
             animator().alphaValue = 0
@@ -741,34 +805,110 @@ class SceneIndicatorWindow: NSWindow {
             self.orderOut(nil)
         }
     }
+
+    func setRecording(_ recording: Bool) {
+        panelView.setRecording(recording)
+    }
 }
 
-class SceneIndicatorView: NSView {
+class ControlPanelView: NSView {
+    var isRecording = false
     var pulseTimer: Timer?
     var dotAlpha: CGFloat = 1.0
+    var onCloseClick: (() -> Void)?
+    var closeButtonHovered = false
+
+    var closeButtonRect: NSRect {
+        NSRect(x: bounds.width - 28, y: bounds.height - 26, width: 20, height: 20)
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        // Background rounded rect
+        let bgPath = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
+        NSColor(white: 0.1, alpha: 0.9).setFill()
+        bgPath.fill()
 
-        // Background pill
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 14, yRadius: 14)
-        NSColor(white: 0.1, alpha: 0.85).setFill()
-        path.fill()
+        let smallFont = NSFont.systemFont(ofSize: 10, weight: .medium)
+        let labelFont = NSFont.systemFont(ofSize: 11, weight: .bold)
 
-        // Red recording dot
-        let dotRect = NSRect(x: 10, y: bounds.midY - 5, width: 10, height: 10)
-        ctx.setFillColor(NSColor.systemRed.withAlphaComponent(dotAlpha).cgColor)
-        ctx.fillEllipse(in: dotRect)
+        // Row 1: Recording status or "vif active"
+        if isRecording {
+            // Red dot
+            let dotRect = NSRect(x: 12, y: bounds.height - 22, width: 8, height: 8)
+            NSColor.systemRed.withAlphaComponent(dotAlpha).setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
 
-        // "SCENE" label
-        let font = NSFont.systemFont(ofSize: 11, weight: .bold)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
-        let label = "SCENE"
-        let size = (label as NSString).size(withAttributes: attrs)
-        (label as NSString).draw(at: NSPoint(x: 26, y: bounds.midY - size.height/2), withAttributes: attrs)
+            // "REC" label
+            let recAttrs: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: NSColor.systemRed]
+            ("REC" as NSString).draw(at: NSPoint(x: 26, y: bounds.height - 24), withAttributes: recAttrs)
+        } else {
+            // Green dot for active
+            let dotRect = NSRect(x: 12, y: bounds.height - 22, width: 8, height: 8)
+            NSColor.systemGreen.setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
+
+            // "vif" label
+            let vifAttrs: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: NSColor.white]
+            ("vif" as NSString).draw(at: NSPoint(x: 26, y: bounds.height - 24), withAttributes: vifAttrs)
+        }
+
+        // X close button (top-right)
+        let xColor = closeButtonHovered ? NSColor.white : NSColor(white: 0.5, alpha: 1.0)
+        let xFont = NSFont.systemFont(ofSize: 14, weight: .medium)
+        let xAttrs: [NSAttributedString.Key: Any] = [.font: xFont, .foregroundColor: xColor]
+        let xStr = "✕"
+        let xSize = (xStr as NSString).size(withAttributes: xAttrs)
+        (xStr as NSString).draw(at: NSPoint(
+            x: closeButtonRect.midX - xSize.width / 2,
+            y: closeButtonRect.midY - xSize.height / 2
+        ), withAttributes: xAttrs)
+
+        // Row 2: ESC hint
+        let escAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: NSColor(white: 0.6, alpha: 1.0)]
+        ("ESC to dismiss" as NSString).draw(at: NSPoint(x: 12, y: 10), withAttributes: escAttrs)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if closeButtonRect.contains(point) {
+            onCloseClick?()
+        }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let wasHovered = closeButtonHovered
+        closeButtonHovered = closeButtonRect.contains(point)
+        if wasHovered != closeButtonHovered {
+            needsDisplay = true
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas {
+            removeTrackingArea(area)
+        }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .activeAlways],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    func setRecording(_ recording: Bool) {
+        isRecording = recording
+        if recording {
+            startPulsing()
+        } else {
+            stopPulsing()
+        }
+        needsDisplay = true
     }
 
     func startPulsing() {
+        pulseTimer?.invalidate()
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             self.dotAlpha = self.dotAlpha > 0.5 ? 0.3 : 1.0
@@ -780,7 +920,17 @@ class SceneIndicatorView: NSView {
         pulseTimer?.invalidate()
         pulseTimer = nil
         dotAlpha = 1.0
+        needsDisplay = true
     }
+}
+
+// Keep SceneIndicatorWindow for backwards compatibility but we'll use ControlPanelWindow
+class SceneIndicatorWindow: NSWindow {
+    init() {
+        super.init(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+    }
+    func showIndicator() {}
+    func hideIndicator() {}
 }
 
 // MARK: - Screen Recorder
@@ -975,6 +1125,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
     lazy var sceneIndicator = SceneIndicatorWindow()
     lazy var viewportMask = ViewportMaskWindow()
     lazy var recorder = ScreenRecorder()
+    lazy var controlPanel = ControlPanelWindow()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Emit ready FIRST so server knows we're alive
@@ -993,6 +1144,43 @@ class VifAgent: NSObject, NSApplicationDelegate {
             if !checkAccessibility() {
                 fputs("vif-agent: accessibility permission required\n", stderr)
             }
+        }
+
+        // Wire up control panel X button
+        controlPanel.onDismiss = { [weak self] in
+            self?.dismissAll()
+        }
+
+        // Global Escape key handler to dismiss all overlays
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // Escape key
+                self?.dismissAll()
+            }
+        }
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // Escape key
+                self?.dismissAll()
+                return nil
+            }
+            return event
+        }
+    }
+
+    func dismissAll() {
+        DispatchQueue.main.async {
+            self.cursorWindow.hideCursor()
+            self.viewportMask.hideMask()
+            self.keysWindow.hideKeys()
+            self.typerWindow.hideTyper()
+            self.controlPanel.hidePanel()
+
+            // Stop recording if active
+            let status = self.recorder.status()
+            if status.recording {
+                _ = self.recorder.stop()
+            }
+
+            fputs("vif-agent: dismissed all overlays (Escape pressed)\n", stderr)
         }
     }
 
@@ -1034,10 +1222,13 @@ class VifAgent: NSObject, NSApplicationDelegate {
         switch cmd {
         case "show":
             cursorWindow.showCursor()
-            sceneIndicator.showIndicator()
+            controlPanel.showPanel()
         case "hide":
             cursorWindow.hideCursor()
-            sceneIndicator.hideIndicator()
+            // Only hide control panel if nothing else is visible
+            if !viewportMask.isVisible {
+                controlPanel.hidePanel()
+            }
         case "moveTo":
             let x = (json["x"] as? NSNumber)?.doubleValue ?? 0
             let y = (json["y"] as? NSNumber)?.doubleValue ?? 0
@@ -1127,9 +1318,14 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
         case "show":
             viewportMask.showMask()
+            controlPanel.showPanel()
 
         case "hide":
             viewportMask.hideMask()
+            // Only hide control panel if cursor isn't visible
+            if !cursorWindow.isVisible {
+                controlPanel.hidePanel()
+            }
 
         default:
             respond(["ok": false, "error": "unknown viewport cmd: \(cmd)"])
@@ -1147,6 +1343,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
             let result = recorder.start(mode: mode, name: name)
             if result.success {
+                controlPanel.setRecording(true)
+                controlPanel.showPanel()
                 respond(["ok": true, "path": result.path ?? "", "mode": modeStr])
             } else {
                 respond(["ok": false, "error": result.error ?? "Unknown error"])
@@ -1154,6 +1352,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
         case "stop":
             let result = recorder.stop()
+            controlPanel.setRecording(false)
             if result.success {
                 // Get file info
                 var response: [String: Any] = ["ok": true, "path": result.path ?? ""]

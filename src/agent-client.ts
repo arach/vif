@@ -99,6 +99,16 @@ export class VifAgent extends EventEmitter {
         }
       });
 
+      // Log agent's stderr (debug output)
+      this.process.stderr?.on('data', (data: Buffer) => {
+        const text = data.toString();
+        for (const line of text.split('\n')) {
+          if (line.trim()) {
+            console.error('[agent]', line);
+          }
+        }
+      });
+
       this.process.on('error', (err) => {
         this.emit('error', err);
         reject(err);
