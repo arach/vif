@@ -283,8 +283,8 @@ export class VifAgent extends EventEmitter {
     await this.send({ action: 'stage.clear' });
   }
 
-  async stageCenter(app: string, width?: number, height?: number): Promise<void> {
-    await this.send({ action: 'stage.center', app, width, height });
+  async stageCenter(app: string, width?: number, height?: number): Promise<AgentResponse> {
+    return await this.send({ action: 'stage.center', app, width, height });
   }
 
   async stageHideOthers(app: string): Promise<void> {
@@ -319,6 +319,24 @@ export class VifAgent extends EventEmitter {
 
   async recordStatus(): Promise<AgentResponse> {
     return await this.send({ action: 'record.status' });
+  }
+
+  async recordIndicator(show: boolean): Promise<AgentResponse> {
+    return await this.send({ action: 'record.indicator', show });
+  }
+
+  // ─── Panel Commands (control panel visibility) ────────────────────
+
+  async panelShow(): Promise<void> {
+    await this.send({ action: 'panel.show' });
+  }
+
+  async panelHide(): Promise<void> {
+    await this.send({ action: 'panel.hide' });
+  }
+
+  async panelHeadless(enabled: boolean): Promise<void> {
+    await this.send({ action: 'panel.headless', enabled });
   }
 }
 

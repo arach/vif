@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "bin": {
-    "vif": "./dist/cli.js"
+    "vif": "./dist/cli.js",
+    "vif-ctl": "./dist/ctl.js",
+    "vif-mcp": "./dist/mcp/server.js"
   },
   "scripts": {
     "build": "tsc && npm run build:agent",
@@ -41,6 +43,7 @@
   },
   "dependencies": {
     "@arach/og": "^0.2.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "ws": "^8.19.0",
     "yaml": "^2.8.2"
   }

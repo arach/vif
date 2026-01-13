@@ -36,9 +36,9 @@ sequence:
   - click: sidebar.drafts
   - wait: 800ms
 
-  # Click into the text editor area (use DemoKit anchor if available)
+  # Click into the text editor area (use YAML-defined position)
   - label.update: "Click the text editor to start writing"
-  - click: drafts-text-editor
+  - click: drafts.text-editor
   - wait: 500ms
 
   # Type actual text into the text editor
@@ -51,7 +51,7 @@ sequence:
 
   # Click the voice command button to START recording
   - label.update: "Use voice to refine your text with AI"
-  - click: drafts-voice-btn
+  - click: drafts.voice-btn
   - wait: 1000ms  # Wait for audio capture to fully initialize
 
   # Inject voice command through BlackHole virtual mic (while recording is active)
@@ -63,12 +63,12 @@ sequence:
 
   # Click voice button again to STOP recording and trigger transcription
   - label.update: "Processing voice command..."
-  - click: drafts-voice-btn
+  - click: drafts.voice-btn
   - wait: 4000ms  # Wait for transcription and AI processing
 
-  # Click copy button (use DemoKit anchor)
+  # Click copy button
   - label.update: "Copy the refined text"
-  - click: drafts-copy-btn
+  - click: drafts.copy-btn
   - wait: 600ms
 
   # Cleanup

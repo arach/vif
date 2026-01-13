@@ -118,6 +118,17 @@ export class JsonRpcServer {
     try {
       await this.agent.start();
       this.log('vif-agent ready');
+
+      // Listen for user events from the agent (control panel buttons)
+      this.agent.on('user_stop_recording', () => {
+        this.log('User requested stop recording');
+        this.broadcast({ event: 'user_stop_recording' });
+      });
+
+      this.agent.on('user_clear_stage', () => {
+        this.log('User requested clear stage');
+        this.broadcast({ event: 'user_clear_stage' });
+      });
     } catch (err) {
       this.log(`Warning: vif-agent not available (${err instanceof Error ? err.message : 'unknown error'})`);
       this.log('Overlay features will be disabled');
@@ -344,6 +355,8 @@ export class JsonRpcServer {
         return this.handleStageCommand(id, method, cmd);
       case 'record':
         return this.handleRecordCommand(id, method, cmd);
+      case 'panel':
+        return this.handlePanelCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -603,8 +616,37 @@ export class JsonRpcServer {
         };
       }
 
+      case 'indicator': {
+        // Set recording indicator UI without actually recording
+        // Used when TypeScript recorder handles capture
+        const show = cmd.show as boolean;
+        await this.agent!.recordIndicator(show);
+        return { id, ok: true };
+      }
+
       default:
         return { id, ok: false, error: `Unknown record method: ${method}` };
+    }
+  }
+
+  private async handlePanelCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'show':
+        await this.agent!.panelShow();
+        return { id, ok: true };
+
+      case 'hide':
+        await this.agent!.panelHide();
+        return { id, ok: true };
+
+      case 'headless': {
+        const enabled = cmd.enabled as boolean ?? true;
+        await this.agent!.panelHeadless(enabled);
+        return { id, ok: true };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown panel method: ${method}` };
     }
   }
 
@@ -629,8 +671,13 @@ export class JsonRpcServer {
         if (!app) return { id, ok: false, error: 'stage.center requires app name' };
         const width = cmd.width as number | undefined;
         const height = cmd.height as number | undefined;
-        await this.agent!.stageCenter(app, width, height);
-        return { id, ok: true };
+        const result = await this.agent!.stageCenter(app, width, height);
+        // Pass through bounds from agent if available
+        return {
+          id,
+          ok: true,
+          bounds: result.bounds as { x: number; y: number; width: number; height: number } | undefined,
+        };
       }
 
       case 'hideOthers': {

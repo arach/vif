@@ -1,10 +1,14 @@
 /**
  * Vif Scene Runner
  *
- * Executes a parsed scene by sending commands to the vif server via WebSocket.
+ * Executes a parsed scene by:
+ * - Using the recorder module directly for screen capture
+ * - Sending commands to the vif server via WebSocket for overlays/cursor
  */
 
 import WebSocket from 'ws';
+import { homedir } from 'os';
+import { join } from 'path';
 import {
   ParsedScene,
   Action,
@@ -13,6 +17,7 @@ import {
   LabelDef
 } from './parser.js';
 import { resolveTarget, TargetRegistry, queryAppTargets } from './targets.js';
+import { Recorder, RecordingRegion } from '../recorder/index.js';
 
 export interface RunnerOptions {
   port?: number;
@@ -52,6 +57,10 @@ export class SceneRunner {
   private validationResults: ActionResult[] = [];
   private lastEventId: string | null = null;
 
+  // Recorder instance - manages screen capture independently
+  private recorder: Recorder;
+  private viewportRegion: RecordingRegion | undefined;
+
   constructor(scene: ParsedScene, options: RunnerOptions = {}) {
     this.scene = scene;
     this.options = {
@@ -61,6 +70,23 @@ export class SceneRunner {
       validate: true,  // Enable validation by default
       ...options,
     };
+    this.recorder = new Recorder();
+
+    // Set up recorder event handlers
+    this.recorder.on('started', (info) => {
+      this.log(`🎬 Recording started: ${info.output}`);
+      if (info.region) {
+        this.log(`🎬 Region: x=${info.region.x}, y=${info.region.y}, ${info.region.width}x${info.region.height}`);
+      } else {
+        this.log(`🎬 Region: full screen`);
+      }
+    });
+    this.recorder.on('stopped', (info) => {
+      this.log(`🎬 Recording stopped: ${info.output}`);
+    });
+    this.recorder.on('error', (err) => {
+      this.log(`🎬 Recording error: ${err.message}`);
+    });
   }
 
   // ─── Validation Methods ─────────────────────────────────────────────
@@ -261,6 +287,23 @@ export class SceneRunner {
   }
 
   /**
+   * Get output file path for recording
+   */
+  private getOutputPath(mode: 'draft' | 'final', name?: string): string {
+    const vifDir = join(homedir(), '.vif');
+
+    if (mode === 'draft') {
+      // Draft mode: overwrite ~/.vif/draft.mp4
+      return join(vifDir, 'draft.mp4');
+    } else {
+      // Final mode: timestamped file or named file
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = name ? `${name}.mp4` : `recording-${timestamp}.mp4`;
+      return join(vifDir, 'recordings', filename);
+    }
+  }
+
+  /**
    * Run the scene
    */
   async run(): Promise<void> {
@@ -289,8 +332,20 @@ export class SceneRunner {
 
       // Print validation summary
       this.printValidationSummary();
+    } catch (err) {
+      // Force stop recorder if still running
+      if (this.recorder.isRecording()) {
+        this.log('⚠ Force stopping recorder due to error');
+        this.recorder.forceStop();
+      }
+      throw err;
     } finally {
       this.ws?.close();
+
+      // Ensure recorder is stopped
+      if (this.recorder.isRecording()) {
+        this.recorder.forceStop();
+      }
     }
   }
 
@@ -310,25 +365,35 @@ export class SceneRunner {
       const width = app.window?.width || 1200;
       const height = app.window?.height || 800;
 
-      await this.send('stage.center', {
+      const centerResult = await this.send('stage.center', {
         app: app.name,
         width,
         height,
-      });
+      }) as { bounds?: { x: number; y: number; width: number; height: number } };
+
+      // Wait for window to settle after centering
+      await this.sleep(500);
 
       // Store app bounds for coordinate resolution
-      // The stage.center command returns the calculated bounds
-      // For now, calculate based on screen center
-      const screenWidth = 1710; // TODO: Get from server
-      const screenHeight = 1112;
+      // Use actual bounds from stage.center if available, otherwise calculate
+      let screenWidth = 1710;
+      let screenHeight = 1112;
       const padding = stage.viewport?.padding || 10;
 
-      this.appBounds = {
-        x: Math.floor((screenWidth - width) / 2),
-        y: Math.floor((screenHeight - height) / 2),
-        width,
-        height,
-      };
+      if (centerResult.bounds) {
+        // Use actual bounds returned by stage.center
+        this.appBounds = centerResult.bounds;
+        this.log(`📐 Using actual bounds from agent: x=${centerResult.bounds.x}, y=${centerResult.bounds.y}, ${centerResult.bounds.width}x${centerResult.bounds.height}`);
+      } else {
+        this.log(`📐 No bounds from agent, using hardcoded screen size ${screenWidth}x${screenHeight}`);
+        // Fall back to calculated bounds
+        this.appBounds = {
+          x: Math.floor((screenWidth - width) / 2),
+          y: Math.floor((screenHeight - height) / 2),
+          width,
+          height,
+        };
+      }
 
       // Set viewport
       if (stage.viewport) {
@@ -338,8 +403,12 @@ export class SceneRunner {
           width: width + padding * 2,
           height: height + padding * 2,
         };
+        this.log(`📐 Viewport: x=${vp.x}, y=${vp.y}, ${vp.width}x${vp.height}`);
         await this.send('viewport.set', vp);
         await this.send('viewport.show');
+
+        // Store viewport region for recorder
+        this.viewportRegion = vp;
       }
 
       // Query app for registered targets (if app exposes them)
@@ -467,13 +536,32 @@ export class SceneRunner {
       return;
     }
 
-    // record
+    // record - use recorder module directly
     if ('record' in action) {
       if (action.record === 'start') {
         const mode = this.scene.scene.mode || 'draft';
-        await this.send('record.start', { mode, name: this.scene.scene.output });
+        const output = this.getOutputPath(mode, this.scene.scene.output);
+
+        if (this.options.dryRun) {
+          this.log(`🎬 [dry-run] Would start recording to ${output}`);
+        } else {
+          // Show recording indicator in agent UI
+          await this.send('record.indicator', { show: true });
+          await this.recorder.start({
+            output,
+            region: this.viewportRegion,
+            audio: false,
+          });
+        }
       } else {
-        await this.send('record.stop');
+        if (this.options.dryRun) {
+          this.log(`🎬 [dry-run] Would stop recording`);
+        } else {
+          const outputPath = await this.recorder.stop();
+          // Hide recording indicator in agent UI
+          await this.send('record.indicator', { show: false });
+          console.log(`📼 Recording saved: ${outputPath}`);
+        }
       }
       return;
     }

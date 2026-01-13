@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vif": {
+      "command": "node",
+      "args": ["/Users/arach/dev/vif/dist/mcp/server.js"]
+    }
+  }
+}

@@ -3,7 +3,7 @@
  * Vif CLI - Vivid screen capture for macOS
  */
 import { execSync } from 'child_process';
-import { screenshot, screenshotApp, screenshotFullscreen, startRecording, recordVideo, convertVideo, optimizeForWeb, videoToGif, activateApp, listWindows, hasFFmpeg, analyzeAudio, mixAudio, createTake, listTakes, revertTake, pruneTakes, renderStoryboardFile, renderSlide, closeBrowser, templates, renderStoryboardFileEnhanced } from './index.js';
+import { screenshot, screenshotApp, screenshotFullscreen, startRecording, convertVideo, optimizeForWeb, videoToGif, activateApp, listWindows, hasFFmpeg, analyzeAudio, mixAudio, createTake, listTakes, revertTake, pruneTakes, renderStoryboardFile, renderSlide, closeBrowser, templates, renderStoryboardFileEnhanced } from './index.js';
 import { printMusicRecommendations } from './music.js';
 import { printVoiceOptions, generateNarration, getSystemVoices } from './voice.js';
 import { printCacheInfo, clearCache } from './cache.js';
@@ -11,6 +11,7 @@ import { startCursorTracking, saveCursorTrack, applyCursorZoomPan } from './curs
 import { executeDemo, saveDemoRecording, hasCursorControl, toCursorTrack } from './automation.js';
 import { startServer } from './server.js';
 import { runScene, SceneParser } from './dsl/index.js';
+import { Recorder, recordDuration } from './recorder/index.js';
 const args = process.argv.slice(2);
 const command = args[0];
 function printHelp() {
@@ -130,6 +131,17 @@ function parseArgs(args) {
         result._positional4 = positionals[3];
     return result;
 }
+/**
+ * Parse region string "x,y,width,height" into region object
+ */
+function parseRegion(regionStr) {
+    const parts = regionStr.split(',').map(s => parseInt(s.trim(), 10));
+    if (parts.length !== 4 || parts.some(isNaN)) {
+        console.error('Invalid region format. Use: x,y,width,height');
+        return undefined;
+    }
+    return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+}
 async function main() {
     if (!command || command === 'help' || command === '--help' || command === '-h') {
         printHelp();
@@ -190,14 +202,17 @@ async function main() {
         }
         case 'record':
         case 'video': {
+            // Use the new recorder module for clean separation
             const output = opts._positional || 'recording.mp4';
+            const region = opts.region ? parseRegion(opts.region) : undefined;
             if (opts.duration) {
                 const duration = parseFloat(opts.duration);
                 console.log(`Recording for ${duration} seconds...`);
                 try {
-                    const result = await recordVideo({
+                    const result = await recordDuration({
                         output,
                         duration,
+                        region,
                         audio: opts.audio === true
                     });
                     console.log(`Recording saved: ${result}`);
@@ -209,23 +224,33 @@ async function main() {
             }
             else {
                 console.log('Recording... Press Ctrl+C to stop');
-                const recording = startRecording({
-                    output,
-                    audio: opts.audio === true
-                });
-                process.on('SIGINT', async () => {
-                    console.log('\nStopping recording...');
-                    try {
-                        const result = await recording.stop();
-                        console.log(`Recording saved: ${result}`);
-                        process.exit(0);
-                    }
-                    catch (error) {
-                        console.error('Failed to save recording:', error);
-                        process.exit(1);
-                    }
-                });
-                await new Promise(() => { });
+                const recorder = new Recorder();
+                try {
+                    await recorder.start({
+                        output,
+                        region,
+                        audio: opts.audio === true
+                    });
+                    process.on('SIGINT', async () => {
+                        console.log('\nStopping recording...');
+                        try {
+                            const result = await recorder.stop();
+                            console.log(`Recording saved: ${result}`);
+                            process.exit(0);
+                        }
+                        catch (error) {
+                            console.error('Failed to save recording:', error);
+                            recorder.forceStop();
+                            process.exit(1);
+                        }
+                    });
+                    await new Promise(() => { });
+                }
+                catch (error) {
+                    console.error('Recording failed:', error);
+                    recorder.forceStop();
+                    process.exit(1);
+                }
             }
             break;
         }

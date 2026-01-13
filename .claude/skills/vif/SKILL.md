@@ -461,3 +461,110 @@ pnpm build && pnpm build:agent
 - Verify BlackHole is installed
 - Check app is using selected microphone (not system default)
 - Verify audio file exists and is playable
+
+## Agentic Control
+
+When Claude needs to control vif directly (cursor, labels, backdrop), use this WebSocket command pattern:
+
+### Quick Control Script
+
+```javascript
+// Single command
+node -e "
+const ws = new (require('ws'))('ws://localhost:7850');
+ws.on('open', () => {
+  ws.send(JSON.stringify({id: 1, action: 'ACTION', ...PARAMS}));
+});
+ws.on('message', d => { console.log(d.toString()); ws.close(); });
+"
+```
+
+### Available Actions
+
+**Cursor:**
+- `cursor.show` - Show animated cursor
+- `cursor.hide` - Hide cursor
+- `cursor.moveTo` - Move: `{x, y, duration}`
+- `cursor.click` - Click animation
+
+**Labels:**
+- `label.show` - Show label: `{text, position: 'top'|'bottom'}`
+- `label.update` - Update: `{text}`
+- `label.hide` - Hide label
+
+**Stage:**
+- `stage.backdrop` - Show/hide: `{show: true|false}`
+- `stage.center` - Center app: `{app, width, height}`
+- `stage.clear` - Clear all overlays
+
+**Viewport:**
+- `viewport.set` - Set region: `{x, y, width, height}`
+- `viewport.show` / `viewport.hide`
+
+**Recording indicator:**
+- `record.indicator` - `{show: true|false}`
+
+**Keys overlay:**
+- `keys.show` - `{keys: ['cmd', 'shift', 'p'], press: true}`
+- `keys.hide`
+
+**Typer overlay:**
+- `typer.type` - `{text, style: 'default'|'terminal'|'code', delay}`
+- `typer.hide`
+
+### Multi-Command Sequence
+
+```javascript
+node -e "
+const ws = new (require('ws'))('ws://localhost:7850');
+let id = 1;
+const send = (action, params = {}) => {
+  ws.send(JSON.stringify({ id: id++, action, ...params }));
+};
+
+ws.on('open', async () => {
+  send('stage.backdrop', { show: true });
+  await new Promise(r => setTimeout(r, 300));
+  send('cursor.show');
+  await new Promise(r => setTimeout(r, 300));
+  send('cursor.moveTo', { x: 500, y: 400, duration: 0.5 });
+  await new Promise(r => setTimeout(r, 700));
+  send('label.show', { text: 'Hello!' });
+  await new Promise(r => setTimeout(r, 1500));
+  // Cleanup
+  send('label.hide');
+  send('cursor.hide');
+  send('stage.backdrop', { show: false });
+  await new Promise(r => setTimeout(r, 300));
+  ws.close();
+});
+ws.on('message', d => console.log('←', d.toString()));
+"
+```
+
+### MCP Server (Recommended)
+
+For native tool access, configure the vif MCP server in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "vif": {
+      "command": "node",
+      "args": ["/path/to/vif/dist/mcp/server.js"]
+    }
+  }
+}
+```
+
+This provides tools like `vif_cursor_move`, `vif_label_show`, etc.
+
+### Server Must Be Running
+
+Before using agentic control, ensure the vif server is running:
+
+```bash
+./dist/cli.js serve
+```
+
+The server listens on `ws://localhost:7850`.

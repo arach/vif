@@ -1087,9 +1087,9 @@ class BackdropWindow: NSWindow {
     }
 }
 
-/// Center an app window on screen
-func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> Bool {
-    guard let screen = NSScreen.main else { return false }
+/// Center an app window on screen and return the actual bounds
+func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> (success: Bool, bounds: NSRect?) {
+    guard let screen = NSScreen.main else { return (false, nil) }
 
     // First activate the app (idempotent - won't launch duplicates)
     let activateScript = "tell application \"\(appName)\" to activate"
@@ -1137,9 +1137,17 @@ func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? 
     var error: NSDictionary?
     if let scriptObj = NSAppleScript(source: script) {
         scriptObj.executeAndReturnError(&error)
-        return error == nil
+        if error == nil {
+            // Calculate the actual bounds based on what we set
+            let actualWidth = width ?? 800
+            let actualHeight = height ?? 600
+            let x = (screen.frame.width - actualWidth) / 2
+            let y = (screen.frame.height - actualHeight) / 2
+            let bounds = NSRect(x: x, y: y, width: actualWidth, height: actualHeight)
+            return (true, bounds)
+        }
     }
-    return false
+    return (false, nil)
 }
 
 // MARK: - Viewport Mask Window
@@ -1269,18 +1277,33 @@ class ViewportMaskView: NSView {
 class ControlPanelWindow: NSWindow {
     let panelView = ControlPanelView()
     var onDismiss: (() -> Void)?
+    var onStopRecording: (() -> Void)?  // Emits event to stop TS recorder
+    var onClearStage: (() -> Void)?     // Clears stage overlays
+
+    let panelWidth: CGFloat = 200
 
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 140, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        let initialHeight = ControlPanelView().collapsedHeight
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 200, height: initialHeight), styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        level = .popUpMenu
-        ignoresMouseEvents = false  // Allow clicks for X button
+        // High level - just below cursor, above everything else including backdrop
+        level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
+        ignoresMouseEvents = false  // Allow clicks
         hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panelView.frame = NSRect(x: 0, y: 0, width: 140, height: 60)
+        panelView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: initialHeight)
         panelView.onCloseClick = { [weak self] in
             self?.onDismiss?()
+        }
+        panelView.onStopRecordingClick = { [weak self] in
+            self?.onStopRecording?()
+        }
+        panelView.onClearStageClick = { [weak self] in
+            self?.onClearStage?()
+        }
+        panelView.onExpandedChanged = { [weak self] expanded in
+            self?.animateResize()
         }
         contentView = panelView
         alphaValue = 0
@@ -1291,9 +1314,26 @@ class ControlPanelWindow: NSWindow {
 
     func positionInTopRight() {
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 150
-            let y = screen.visibleFrame.maxY - 70
+            let height = panelView.currentHeight
+            let x = screen.visibleFrame.maxX - panelWidth - 10
+            let y = screen.visibleFrame.maxY - height - 10
             setFrameOrigin(NSPoint(x: x, y: y))
+        }
+    }
+
+    func animateResize() {
+        let newHeight = panelView.currentHeight
+        guard let screen = NSScreen.main else { return }
+
+        let x = screen.visibleFrame.maxX - panelWidth - 10
+        let y = screen.visibleFrame.maxY - newHeight - 10
+        let newFrame = NSRect(x: x, y: y, width: panelWidth, height: newHeight)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            animator().setFrame(newFrame, display: true)
+            panelView.animator().frame = NSRect(x: 0, y: 0, width: panelWidth, height: newHeight)
         }
     }
 
@@ -1320,6 +1360,22 @@ class ControlPanelWindow: NSWindow {
         panelView.setRecording(recording)
     }
 
+    func setOverlaysVisible(_ visible: Bool) {
+        panelView.setOverlaysVisible(visible)
+    }
+
+    func updateLayer(_ layer: String, visible: Bool, details: [String: Any] = [:]) {
+        panelView.updateLayer(layer, visible: visible, details: details)
+        // Auto-show panel when layers become visible
+        if visible && panelView.hasStageActive {
+            showPanel()
+        }
+    }
+
+    func clearLayers() {
+        panelView.clearLayers()
+    }
+
     func setState(_ state: ControlPanelView.State) {
         panelView.setState(state)
     }
@@ -1332,14 +1388,91 @@ class ControlPanelView: NSView {
         case recording // Recording in progress
     }
 
-    var state: State = .idle
+    // ─── Layer State Tracking ───────────────────────────────────────
+    struct LayerState {
+        var backdropVisible = false
+        var cursorVisible = false
+        var cursorPosition: NSPoint = .zero
+        var labelVisible = false
+        var labelText: String = ""
+        var viewportVisible = false
+        var viewportRect: NSRect = .zero
+        var keysVisible = false
+        var keysShown: [String] = []
+        var typerVisible = false
+
+        var hasAnyVisible: Bool {
+            backdropVisible || cursorVisible || labelVisible ||
+            viewportVisible || keysVisible || typerVisible
+        }
+
+        var visibleCount: Int {
+            [backdropVisible, cursorVisible, labelVisible,
+             viewportVisible, keysVisible, typerVisible].filter { $0 }.count
+        }
+    }
+
+    var layers = LayerState()
+    var stageExpanded = false  // Whether layer list is expanded
+
+    // Separate state tracking
+    var isRecording = false
+    var hasStageActive: Bool { layers.hasAnyVisible }
+
+    var state: State = .idle  // Legacy - computed from above
     var pulseTimer: Timer?
     var dotAlpha: CGFloat = 1.0
+
+    // Callbacks
     var onCloseClick: (() -> Void)?
+    var onStopRecordingClick: (() -> Void)?
+    var onClearStageClick: (() -> Void)?
+    var onToggleLayer: ((String) -> Void)?  // Toggle individual layer
+    var onExpandedChanged: ((Bool) -> Void)?  // Notify when expanded changes
+
+    // Hover states
     var closeButtonHovered = false
+    var stopRecordingHovered = false
+    var clearStageHovered = false
+    var stageRowHovered = false
+    var hoveredLayerIndex: Int? = nil
+
+    // Layout constants
+    let rowHeight: CGFloat = 22
+    let layerRowHeight: CGFloat = 18
+    let buttonWidth: CGFloat = 50
+    let leftMargin: CGFloat = 14
+    let headerHeight: CGFloat = 32
+    let footerHeight: CGFloat = 24
+
+    // Computed heights
+    var collapsedHeight: CGFloat { headerHeight + rowHeight * 2 + footerHeight + 16 }
+    var expandedHeight: CGFloat {
+        collapsedHeight + CGFloat(6) * layerRowHeight + 8  // 6 possible layers + padding
+    }
+    var currentHeight: CGFloat {
+        stageExpanded && hasStageActive ? expandedHeight : collapsedHeight
+    }
 
     var closeButtonRect: NSRect {
         NSRect(x: bounds.width - 28, y: bounds.height - 26, width: 20, height: 20)
+    }
+
+    // Row positions (from top)
+    var recordingRowY: CGFloat { bounds.height - headerHeight - rowHeight - 4 }
+    var stageRowY: CGFloat { recordingRowY - rowHeight - 4 }
+
+    var stopRecordingRect: NSRect {
+        NSRect(x: bounds.width - buttonWidth - 14, y: recordingRowY, width: buttonWidth, height: 20)
+    }
+
+    var clearStageRect: NSRect {
+        NSRect(x: bounds.width - buttonWidth - 14, y: stageRowY, width: buttonWidth, height: 20)
+    }
+
+    var stageExpandRect: NSRect {
+        // Clickable area for expanding (the row minus the clear button)
+        NSRect(x: leftMargin, y: stageRowY, width: bounds.width - buttonWidth - leftMargin - 20, height: 20)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1351,40 +1484,13 @@ class ControlPanelView: NSView {
         bgPath.lineWidth = 0.5
         bgPath.stroke()
 
-        // Brand: "vif" in stylized font
+        // Header: "vif" brand + close button
         let brandFont = NSFont.systemFont(ofSize: 16, weight: .bold)
         let brandAttrs: [NSAttributedString.Key: Any] = [
             .font: brandFont,
             .foregroundColor: NSColor.white
         ]
-        ("vif" as NSString).draw(at: NSPoint(x: 14, y: bounds.height - 28), withAttributes: brandAttrs)
-
-        // State indicator (dot + label)
-        let dotRect = NSRect(x: 50, y: bounds.height - 22, width: 8, height: 8)
-        let stateFont = NSFont.systemFont(ofSize: 11, weight: .medium)
-
-        switch state {
-        case .recording:
-            // Red pulsing dot + "REC"
-            NSColor.systemRed.withAlphaComponent(dotAlpha).setFill()
-            NSBezierPath(ovalIn: dotRect).fill()
-            let attrs: [NSAttributedString.Key: Any] = [.font: stateFont, .foregroundColor: NSColor.systemRed]
-            ("REC" as NSString).draw(at: NSPoint(x: 64, y: bounds.height - 24), withAttributes: attrs)
-
-        case .active:
-            // Green dot + "ready"
-            NSColor.systemGreen.setFill()
-            NSBezierPath(ovalIn: dotRect).fill()
-            let attrs: [NSAttributedString.Key: Any] = [.font: stateFont, .foregroundColor: NSColor.systemGreen]
-            ("ready" as NSString).draw(at: NSPoint(x: 64, y: bounds.height - 24), withAttributes: attrs)
-
-        case .idle:
-            // Gray dot + "idle"
-            NSColor(white: 0.5, alpha: 1.0).setFill()
-            NSBezierPath(ovalIn: dotRect).fill()
-            let attrs: [NSAttributedString.Key: Any] = [.font: stateFont, .foregroundColor: NSColor(white: 0.5, alpha: 1.0)]
-            ("idle" as NSString).draw(at: NSPoint(x: 64, y: bounds.height - 24), withAttributes: attrs)
-        }
+        ("vif" as NSString).draw(at: NSPoint(x: leftMargin, y: bounds.height - 28), withAttributes: brandAttrs)
 
         // X close button (top-right)
         let xColor = closeButtonHovered ? NSColor.white : NSColor(white: 0.4, alpha: 1.0)
@@ -1397,24 +1503,185 @@ class ControlPanelView: NSView {
             y: closeButtonRect.midY - xSize.height / 2
         ), withAttributes: xAttrs)
 
-        // Row 2: ESC hint
-        let smallFont = NSFont.systemFont(ofSize: 10, weight: .regular)
-        let escAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: NSColor(white: 0.45, alpha: 1.0)]
-        ("ESC to dismiss" as NSString).draw(at: NSPoint(x: 14, y: 10), withAttributes: escAttrs)
+        let labelFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let buttonFont = NSFont.systemFont(ofSize: 10, weight: .medium)
+
+        // ─── Row 1: Recording ───────────────────────────────────────
+        let recDotRect = NSRect(x: leftMargin, y: recordingRowY + 6, width: 8, height: 8)
+        if isRecording {
+            NSColor.systemRed.withAlphaComponent(dotAlpha).setFill()
+        } else {
+            NSColor(white: 0.35, alpha: 1.0).setFill()
+        }
+        NSBezierPath(ovalIn: recDotRect).fill()
+
+        let recLabelColor = isRecording ? NSColor.systemRed : NSColor(white: 0.5, alpha: 1.0)
+        let recLabelAttrs: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: recLabelColor]
+        ("Recording" as NSString).draw(at: NSPoint(x: leftMargin + 14, y: recordingRowY + 3), withAttributes: recLabelAttrs)
+
+        // Stop button
+        let stopBg = stopRecordingHovered && isRecording ? NSColor(white: 0.25, alpha: 1.0) : NSColor(white: 0.15, alpha: 1.0)
+        let stopPath = NSBezierPath(roundedRect: stopRecordingRect, xRadius: 5, yRadius: 5)
+        stopBg.setFill()
+        stopPath.fill()
+        let stopColor = isRecording ? NSColor.systemRed : NSColor(white: 0.35, alpha: 1.0)
+        let stopAttrs: [NSAttributedString.Key: Any] = [.font: buttonFont, .foregroundColor: stopColor]
+        let stopStr = "Stop"
+        let stopSize = (stopStr as NSString).size(withAttributes: stopAttrs)
+        (stopStr as NSString).draw(at: NSPoint(
+            x: stopRecordingRect.midX - stopSize.width / 2,
+            y: stopRecordingRect.midY - stopSize.height / 2
+        ), withAttributes: stopAttrs)
+
+        // ─── Row 2: Stage ───────────────────────────────────────────
+        let stageDotRect = NSRect(x: leftMargin, y: stageRowY + 6, width: 8, height: 8)
+        if hasStageActive {
+            NSColor.systemGreen.setFill()
+        } else {
+            NSColor(white: 0.35, alpha: 1.0).setFill()
+        }
+        NSBezierPath(ovalIn: stageDotRect).fill()
+
+        // Stage label with expand/collapse indicator
+        let stageLabelColor = hasStageActive ? NSColor.systemGreen : NSColor(white: 0.5, alpha: 1.0)
+        let stageLabelAttrs: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: stageLabelColor]
+        let expandIcon = (stageExpanded && hasStageActive) ? "▼" : "▶"
+        let stageLabel = hasStageActive ? "Stage \(expandIcon)" : "Stage"
+        (stageLabel as NSString).draw(at: NSPoint(x: leftMargin + 14, y: stageRowY + 3), withAttributes: stageLabelAttrs)
+
+        // Layer count badge (when collapsed and has layers)
+        if hasStageActive && !stageExpanded {
+            let countStr = "\(layers.visibleCount)"
+            let countFont = NSFont.systemFont(ofSize: 9, weight: .semibold)
+            let countAttrs: [NSAttributedString.Key: Any] = [.font: countFont, .foregroundColor: NSColor.white]
+            let countSize = (countStr as NSString).size(withAttributes: countAttrs)
+            let badgeRect = NSRect(x: leftMargin + 70, y: stageRowY + 4, width: countSize.width + 8, height: 14)
+            NSColor(white: 0.3, alpha: 1.0).setFill()
+            NSBezierPath(roundedRect: badgeRect, xRadius: 7, yRadius: 7).fill()
+            (countStr as NSString).draw(at: NSPoint(x: badgeRect.midX - countSize.width / 2, y: stageRowY + 5), withAttributes: countAttrs)
+        }
+
+        // Clear button
+        let clearBg = clearStageHovered && hasStageActive ? NSColor(white: 0.25, alpha: 1.0) : NSColor(white: 0.15, alpha: 1.0)
+        let clearPath = NSBezierPath(roundedRect: clearStageRect, xRadius: 5, yRadius: 5)
+        clearBg.setFill()
+        clearPath.fill()
+        let clearColor = hasStageActive ? NSColor.white : NSColor(white: 0.35, alpha: 1.0)
+        let clearAttrs: [NSAttributedString.Key: Any] = [.font: buttonFont, .foregroundColor: clearColor]
+        let clearStr = "Clear"
+        let clearSize = (clearStr as NSString).size(withAttributes: clearAttrs)
+        (clearStr as NSString).draw(at: NSPoint(
+            x: clearStageRect.midX - clearSize.width / 2,
+            y: clearStageRect.midY - clearSize.height / 2
+        ), withAttributes: clearAttrs)
+
+        // ─── Expanded Layer List ────────────────────────────────────
+        if stageExpanded && hasStageActive {
+            drawLayerList()
+        }
+
+        // ─── Footer: Keyboard hints ─────────────────────────────────
+        let smallFont = NSFont.systemFont(ofSize: 9, weight: .regular)
+        let hintAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: NSColor(white: 0.4, alpha: 1.0)]
+        ("ESC dismiss   ⇧⌘X reset" as NSString).draw(at: NSPoint(x: leftMargin - 4, y: 8), withAttributes: hintAttrs)
+    }
+
+    func drawLayerList() {
+        let layerFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        let layerIndent: CGFloat = leftMargin + 12
+        var yPos = stageRowY - 6
+
+        // Define layers to show
+        let layerDefs: [(String, Bool, String)] = [
+            ("Backdrop", layers.backdropVisible, ""),
+            ("Cursor", layers.cursorVisible, layers.cursorVisible ? String(format: "(%.0f, %.0f)", layers.cursorPosition.x, layers.cursorPosition.y) : ""),
+            ("Label", layers.labelVisible, layers.labelVisible ? "\"\(String(layers.labelText.prefix(16)))\(layers.labelText.count > 16 ? "..." : "")\"" : ""),
+            ("Viewport", layers.viewportVisible, layers.viewportVisible ? String(format: "%.0fx%.0f", layers.viewportRect.width, layers.viewportRect.height) : ""),
+            ("Keys", layers.keysVisible, layers.keysVisible ? layers.keysShown.joined(separator: "+") : ""),
+            ("Typer", layers.typerVisible, ""),
+        ]
+
+        for (index, (name, visible, detail)) in layerDefs.enumerated() {
+            yPos -= layerRowHeight
+
+            // Dot indicator
+            let dotRect = NSRect(x: layerIndent, y: yPos + 5, width: 6, height: 6)
+            if visible {
+                NSColor.systemGreen.withAlphaComponent(0.8).setFill()
+            } else {
+                NSColor(white: 0.25, alpha: 1.0).setFill()
+            }
+            NSBezierPath(ovalIn: dotRect).fill()
+
+            // Layer name
+            let nameColor = visible ? NSColor(white: 0.8, alpha: 1.0) : NSColor(white: 0.4, alpha: 1.0)
+            let isHovered = hoveredLayerIndex == index
+            let nameAttrs: [NSAttributedString.Key: Any] = [
+                .font: layerFont,
+                .foregroundColor: isHovered ? NSColor.white : nameColor
+            ]
+            (name as NSString).draw(at: NSPoint(x: layerIndent + 12, y: yPos + 2), withAttributes: nameAttrs)
+
+            // Detail (position, text preview, etc.)
+            if !detail.isEmpty {
+                let detailAttrs: [NSAttributedString.Key: Any] = [
+                    .font: layerFont,
+                    .foregroundColor: NSColor(white: 0.5, alpha: 1.0)
+                ]
+                (detail as NSString).draw(at: NSPoint(x: layerIndent + 70, y: yPos + 2), withAttributes: detailAttrs)
+            }
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+
         if closeButtonRect.contains(point) {
             onCloseClick?()
+        } else if stopRecordingRect.contains(point) && isRecording {
+            onStopRecordingClick?()
+        } else if clearStageRect.contains(point) && hasStageActive {
+            onClearStageClick?()
+        } else if stageExpandRect.contains(point) && hasStageActive {
+            // Toggle stage expansion
+            stageExpanded = !stageExpanded
+            onExpandedChanged?(stageExpanded)
+            needsDisplay = true
         }
     }
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        let wasHovered = closeButtonHovered
+        let wasCloseHovered = closeButtonHovered
+        let wasStopHovered = stopRecordingHovered
+        let wasClearHovered = clearStageHovered
+        let wasStageHovered = stageRowHovered
+
         closeButtonHovered = closeButtonRect.contains(point)
-        if wasHovered != closeButtonHovered {
+        stopRecordingHovered = stopRecordingRect.contains(point)
+        clearStageHovered = clearStageRect.contains(point)
+        stageRowHovered = stageExpandRect.contains(point)
+
+        // Check layer hover (when expanded)
+        let oldHoveredLayer = hoveredLayerIndex
+        hoveredLayerIndex = nil
+        if stageExpanded && hasStageActive {
+            var yPos = stageRowY - 6
+            for i in 0..<6 {
+                yPos -= layerRowHeight
+                let layerRect = NSRect(x: leftMargin + 12, y: yPos, width: bounds.width - 40, height: layerRowHeight)
+                if layerRect.contains(point) {
+                    hoveredLayerIndex = i
+                    break
+                }
+            }
+        }
+
+        if wasCloseHovered != closeButtonHovered ||
+           wasStopHovered != stopRecordingHovered ||
+           wasClearHovered != clearStageHovered ||
+           wasStageHovered != stageRowHovered ||
+           oldHoveredLayer != hoveredLayerIndex {
             needsDisplay = true
         }
     }
@@ -1432,9 +1699,11 @@ class ControlPanelView: NSView {
         ))
     }
 
-    func setState(_ newState: State) {
-        state = newState
-        if newState == .recording {
+    // ─── State Management ───────────────────────────────────────────
+
+    func setRecording(_ recording: Bool) {
+        isRecording = recording
+        if recording {
             startPulsing()
         } else {
             stopPulsing()
@@ -1442,9 +1711,67 @@ class ControlPanelView: NSView {
         needsDisplay = true
     }
 
+    func setOverlaysVisible(_ visible: Bool) {
+        // Legacy - now handled via layer state
+        needsDisplay = true
+    }
+
+    func updateLayer(_ layer: String, visible: Bool, details: [String: Any] = [:]) {
+        switch layer {
+        case "backdrop":
+            layers.backdropVisible = visible
+        case "cursor":
+            layers.cursorVisible = visible
+            if let x = details["x"] as? Double, let y = details["y"] as? Double {
+                layers.cursorPosition = NSPoint(x: x, y: y)
+            }
+        case "label":
+            layers.labelVisible = visible
+            if let text = details["text"] as? String {
+                layers.labelText = text
+            }
+        case "viewport":
+            layers.viewportVisible = visible
+            if let rect = details["rect"] as? NSRect {
+                layers.viewportRect = rect
+            }
+        case "keys":
+            layers.keysVisible = visible
+            if let keys = details["keys"] as? [String] {
+                layers.keysShown = keys
+            }
+        case "typer":
+            layers.typerVisible = visible
+        default:
+            break
+        }
+        needsDisplay = true
+    }
+
+    func clearLayers() {
+        layers = LayerState()
+        stageExpanded = false
+        needsDisplay = true
+    }
+
     // Legacy method for compatibility
-    func setRecording(_ recording: Bool) {
-        setState(recording ? .recording : .active)
+    func setState(_ newState: State) {
+        state = newState
+        switch newState {
+        case .recording:
+            isRecording = true
+        case .active:
+            isRecording = false
+        case .idle:
+            isRecording = false
+            clearLayers()
+        }
+        if isRecording {
+            startPulsing()
+        } else {
+            stopPulsing()
+        }
+        needsDisplay = true
     }
 
     func startPulsing() {
@@ -1668,6 +1995,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
     lazy var labelWindow = LabelWindow()
     lazy var recorder = ScreenRecorder()
     lazy var controlPanel = ControlPanelWindow()
+    var headlessMode = false  // When true, control panel stays hidden
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Emit ready FIRST so server knows we're alive
@@ -1688,49 +2016,143 @@ class VifAgent: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Wire up control panel X button
+        // Wire up control panel buttons
         controlPanel.onDismiss = { [weak self] in
             self?.dismissAll()
         }
+        controlPanel.onStopRecording = { [weak self] in
+            guard let self = self else { return }
+            // Emit event to server/runner to stop the TypeScript recorder
+            print("{\"event\":\"user_stop_recording\"}")
+            fflush(stdout)
+            // Update local UI state
+            self.controlPanel.setRecording(false)
+            fputs("[agent] user requested stop recording\n", stderr)
+        }
+        controlPanel.onClearStage = { [weak self] in
+            guard let self = self else { return }
+            self.clearOverlays()
+            fputs("[agent] user requested clear stage\n", stderr)
+        }
 
-        // Global Escape key handler to dismiss all overlays
+        // Global keyboard handler for shortcuts
         NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 { // Escape key
-                self?.dismissAll()
-            }
+            self?.handleGlobalKeyDown(event)
         }
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 { // Escape key
-                self?.dismissAll()
-                return nil
+            if self?.handleGlobalKeyDown(event) == true {
+                return nil  // Consume the event
             }
             return event
         }
     }
 
-    /// Check if any overlay is currently visible
+    /// Handle global keyboard shortcuts
+    /// Returns true if the event was handled
+    @discardableResult
+    func handleGlobalKeyDown(_ event: NSEvent) -> Bool {
+        let hasCmd = event.modifierFlags.contains(.command)
+        let hasShift = event.modifierFlags.contains(.shift)
+        let hasCtrl = event.modifierFlags.contains(.control)
+        let hasOpt = event.modifierFlags.contains(.option)
+
+        // Escape - dismiss all overlays AND exit headless mode (failsafe)
+        if event.keyCode == 53 {
+            if headlessMode {
+                headlessMode = false
+                fputs("[agent] exited headless mode (Escape)\n", stderr)
+            }
+            dismissAll()
+            return true
+        }
+
+        // Cmd+Ctrl+Option+V - Exit headless mode / show panel
+        if hasCmd && hasCtrl && hasOpt && event.keyCode == 0x09 { // V key
+            if headlessMode {
+                headlessMode = false
+                controlPanel.showPanel()
+                fputs("[agent] exited headless mode (⌃⌥⌘V)\n", stderr)
+            } else {
+                // Toggle - if not headless, enter headless
+                headlessMode = true
+                controlPanel.hidePanel()
+                fputs("[agent] entered headless mode (⌃⌥⌘V)\n", stderr)
+            }
+            return true
+        }
+
+        // Cmd+Shift+R - stop recording only
+        if hasCmd && hasShift && event.keyCode == 0x0F { // R key
+            let status = recorder.status()
+            if status.recording {
+                _ = recorder.stop()
+                controlPanel.setRecording(false)
+                fputs("vif-agent: stopped recording (Cmd+Shift+R)\n", stderr)
+            }
+            return true
+        }
+
+        // Cmd+Shift+X - clear/reset stage completely
+        if hasCmd && hasShift && event.keyCode == 0x07 { // X key
+            clearStage()
+            fputs("vif-agent: cleared stage (Cmd+Shift+X)\n", stderr)
+            return true
+        }
+
+        return false
+    }
+
+    /// Clear all stage elements (overlays + recording)
+    func clearStage() {
+        clearOverlays()
+        // Also stop recording if the local recorder is running
+        let status = recorder.status()
+        if status.recording {
+            _ = recorder.stop()
+        }
+        controlPanel.setRecording(false)
+        controlPanel.hidePanel()
+        // Emit event so server knows to stop TS recorder too
+        print("{\"event\":\"user_clear_stage\"}")
+        fflush(stdout)
+    }
+
+    /// Clear only overlays (not recording)
+    func clearOverlays() {
+        backdrop.hideBackdrop()
+        viewportMask.alphaValue = 0
+        cursorWindow.alphaValue = 0
+        labelWindow.alphaValue = 0
+        keysWindow.alphaValue = 0
+        typerWindow.alphaValue = 0
+        controlPanel.setOverlaysVisible(false)
+        controlPanel.clearLayers()
+    }
+
+    /// Check if any overlay is currently visible (excludes recording indicator)
     func anyOverlayVisible() -> Bool {
-        return cursorWindow.isVisible ||
-               viewportMask.isVisible ||
-               backdrop.isVisible ||
-               labelWindow.isVisible ||
-               keysWindow.isVisible ||
-               typerWindow.isVisible ||
-               recorder.status().recording
+        return cursorWindow.alphaValue > 0 ||
+               viewportMask.alphaValue > 0 ||
+               backdrop.alphaValue > 0 ||
+               labelWindow.alphaValue > 0 ||
+               keysWindow.alphaValue > 0 ||
+               typerWindow.alphaValue > 0
     }
 
     /// Update control panel visibility and state based on overlay state
     func updateControlPanel() {
-        if anyOverlayVisible() {
-            controlPanel.showPanel()
-            // Set state based on what's happening
-            if recorder.status().recording {
-                controlPanel.setState(.recording)
+        let overlaysVisible = anyOverlayVisible()
+        let isRecording = controlPanel.panelView.isRecording  // Use the panel's tracking
+
+        controlPanel.setOverlaysVisible(overlaysVisible)
+
+        // Show panel if anything is active (unless in headless mode)
+        if !headlessMode {
+            if overlaysVisible || isRecording {
+                controlPanel.showPanel()
             } else {
-                controlPanel.setState(.active)
+                controlPanel.hidePanel()
             }
-        } else {
-            controlPanel.hidePanel()
         }
     }
 
@@ -1786,6 +2208,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handleRecord(cmd, json)
         case "voice":
             handleVoice(cmd, json)
+        case "panel":
+            handlePanel(cmd, json)
         default:
             if action == "quit" {
                 respond(["ok": true])
@@ -1800,15 +2224,17 @@ class VifAgent: NSObject, NSApplicationDelegate {
         switch cmd {
         case "show":
             cursorWindow.showCursor()
-            controlPanel.showPanel()
+            controlPanel.updateLayer("cursor", visible: true)
         case "hide":
             cursorWindow.hideCursor()
-            updateControlPanel()
+            controlPanel.updateLayer("cursor", visible: false)
         case "moveTo":
             let x = (json["x"] as? NSNumber)?.doubleValue ?? 0
             let y = (json["y"] as? NSNumber)?.doubleValue ?? 0
             let dur = (json["duration"] as? NSNumber)?.doubleValue ?? 0.3
             cursorWindow.moveTo(x: x, y: y, duration: dur)
+            // Update position in layer state
+            controlPanel.updateLayer("cursor", visible: true, details: ["x": x, "y": y])
         case "click":
             cursorWindow.click()
         case "doubleClick":
@@ -1831,6 +2257,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
         case "show":
             if let keys = json["keys"] as? [String] {
                 keysWindow.showKeys(keys)
+                controlPanel.updateLayer("keys", visible: true, details: ["keys": keys])
                 if json["press"] as? Bool == true {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { pressKeys(keys) }
                 }
@@ -1841,6 +2268,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
             }
         case "hide":
             keysWindow.hideKeys()
+            controlPanel.updateLayer("keys", visible: false)
         default:
             respond(["ok": false, "error": "unknown keys cmd: \(cmd)"])
             return
@@ -1855,11 +2283,13 @@ class VifAgent: NSObject, NSApplicationDelegate {
                 let style = json["style"] as? String ?? "default"
                 let delay = json["delay"] as? Double ?? 0.05
                 typerWindow.typeText(text, style: style, delay: delay)
+                controlPanel.updateLayer("typer", visible: true)
             }
         case "clear":
             typerWindow.clearText()
         case "hide":
             typerWindow.hideTyper()
+            controlPanel.updateLayer("typer", visible: false)
         default:
             respond(["ok": false, "error": "unknown typer cmd: \(cmd)"])
             return
@@ -1913,11 +2343,12 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
         case "show":
             viewportMask.showMask()
-            controlPanel.showPanel()
+            let rect = viewportMask.maskView.viewportRect
+            controlPanel.updateLayer("viewport", visible: true, details: ["rect": rect])
 
         case "hide":
             viewportMask.hideMask()
-            updateControlPanel()
+            controlPanel.updateLayer("viewport", visible: false)
 
         default:
             respond(["ok": false, "error": "unknown viewport cmd: \(cmd)"])
@@ -1937,6 +2368,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
             // Show solid backdrop first (covers everything)
             backdrop.showBackdrop()
+            // Ensure control panel stays on top of backdrop
+            controlPanel.orderFrontRegardless()
 
             // Small delay to let backdrop appear, then hide other apps and center
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -1959,15 +2392,18 @@ class VifAgent: NSObject, NSApplicationDelegate {
             backdrop.hideBackdrop()
             restoreAppState()
             let _ = showDesktopIcons()
+            controlPanel.clearLayers()
 
         case "backdrop":
             // Just show/hide backdrop
             if json["show"] as? Bool == true {
                 backdrop.showBackdrop()
-                controlPanel.showPanel()
+                controlPanel.updateLayer("backdrop", visible: true)
+                // Ensure control panel stays on top of backdrop
+                controlPanel.orderFrontRegardless()
             } else {
                 backdrop.hideBackdrop()
-                updateControlPanel()
+                controlPanel.updateLayer("backdrop", visible: false)
             }
 
         case "render":
@@ -1992,7 +2428,21 @@ class VifAgent: NSObject, NSApplicationDelegate {
             }
             let width = (json["width"] as? NSNumber)?.doubleValue
             let height = (json["height"] as? NSNumber)?.doubleValue
-            let _ = centerAppWindow(app, width: width.map { CGFloat($0) }, height: height.map { CGFloat($0) })
+            let result = centerAppWindow(app, width: width.map { CGFloat($0) }, height: height.map { CGFloat($0) })
+            if let bounds = result.bounds {
+                respond([
+                    "ok": true,
+                    "bounds": [
+                        "x": Int(bounds.origin.x),
+                        "y": Int(bounds.origin.y),
+                        "width": Int(bounds.width),
+                        "height": Int(bounds.height)
+                    ]
+                ])
+            } else {
+                respond(["ok": result.success])
+            }
+            return
 
         case "hideOthers":
             // Just hide other apps (saves state)
@@ -2025,15 +2475,16 @@ class VifAgent: NSObject, NSApplicationDelegate {
                                   x: x.map { CGFloat($0) },
                                   y: y.map { CGFloat($0) },
                                   width: width.map { CGFloat($0) })
-            controlPanel.showPanel()
+            controlPanel.updateLayer("label", visible: true, details: ["text": text])
 
         case "hide":
             labelWindow.hideLabel()
-            updateControlPanel()
+            controlPanel.updateLayer("label", visible: false)
 
         case "update":
             let text = json["text"] as? String ?? ""
             labelWindow.updateText(text)
+            controlPanel.updateLayer("label", visible: true, details: ["text": text])
 
         default:
             respond(["ok": false, "error": "unknown label cmd: \(cmd)"])
@@ -2052,7 +2503,9 @@ class VifAgent: NSObject, NSApplicationDelegate {
             let result = recorder.start(mode: mode, name: name)
             if result.success {
                 controlPanel.setRecording(true)
-                controlPanel.showPanel()
+                if !headlessMode {
+                    controlPanel.showPanel()
+                }
                 respond(["ok": true, "path": result.path ?? "", "mode": modeStr])
             } else {
                 respond(["ok": false, "error": result.error ?? "Unknown error"])
@@ -2084,8 +2537,48 @@ class VifAgent: NSObject, NSApplicationDelegate {
                 "path": status.path ?? ""
             ])
 
+        case "indicator":
+            // Set recording indicator UI state without actually recording
+            // Used when external recorder (TypeScript) handles actual capture
+            let show = json["show"] as? Bool ?? false
+            controlPanel.setRecording(show)
+            if show && !headlessMode {
+                controlPanel.showPanel()
+            }
+            fputs("[agent] recorder: indicator \(show ? "on" : "off")\n", stderr)
+            respond(["ok": true])
+
         default:
             respond(["ok": false, "error": "unknown record cmd: \(cmd)"])
+        }
+    }
+
+    // MARK: - Panel (Control Panel visibility)
+
+    func handlePanel(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "show":
+            controlPanel.showPanel()
+            fputs("[agent] panel: showing\n", stderr)
+            respond(["ok": true])
+
+        case "hide":
+            controlPanel.hidePanel()
+            fputs("[agent] panel: hidden\n", stderr)
+            respond(["ok": true])
+
+        case "headless":
+            // Enable/disable headless mode (auto-hide panel during scenes)
+            let enabled = json["enabled"] as? Bool ?? true
+            headlessMode = enabled
+            if enabled {
+                controlPanel.hidePanel()
+            }
+            fputs("[agent] panel: headless mode \(enabled ? "on" : "off")\n", stderr)
+            respond(["ok": true])
+
+        default:
+            respond(["ok": false, "error": "unknown panel cmd: \(cmd)"])
         }
     }
 
