@@ -40,6 +40,7 @@
     "url": "https://github.com/arach/vif"
   },
   "dependencies": {
+    "@arach/og": "^0.2.0",
     "ws": "^8.19.0",
     "yaml": "^2.8.2"
   }

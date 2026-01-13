@@ -235,6 +235,54 @@ export class VifAgent extends EventEmitter {
     await this.send({ action: 'viewport.hide' });
   }
 
+  // ─── Label Commands (scene info, teleprompter) ────────────────────
+
+  async labelShow(text: string, options?: { position?: 'top' | 'bottom'; x?: number; y?: number; width?: number }): Promise<void> {
+    await this.send({ action: 'label.show', text, ...options });
+  }
+
+  async labelHide(): Promise<void> {
+    await this.send({ action: 'label.hide' });
+  }
+
+  async labelUpdate(text: string): Promise<void> {
+    await this.send({ action: 'label.update', text });
+  }
+
+  // ─── Stage Commands (clean recording environment) ─────────────────
+
+  async stageSet(app: string, width?: number, height?: number, hideDesktop?: boolean): Promise<void> {
+    await this.send({ action: 'stage.set', app, width, height, hideDesktop });
+  }
+
+  async stageClear(): Promise<void> {
+    await this.send({ action: 'stage.clear' });
+  }
+
+  async stageCenter(app: string, width?: number, height?: number): Promise<void> {
+    await this.send({ action: 'stage.center', app, width, height });
+  }
+
+  async stageHideOthers(app: string): Promise<void> {
+    await this.send({ action: 'stage.hideOthers', app });
+  }
+
+  async stageHideDesktop(): Promise<void> {
+    await this.send({ action: 'stage.hideDesktop' });
+  }
+
+  async stageShowDesktop(): Promise<void> {
+    await this.send({ action: 'stage.showDesktop' });
+  }
+
+  async stageBackdrop(show: boolean): Promise<void> {
+    await this.send({ action: 'stage.backdrop', show });
+  }
+
+  async stageRender(params: Record<string, unknown>): Promise<void> {
+    await this.send({ action: 'stage.render', ...params });
+  }
+
   // ─── Recording Commands ───────────────────────────────────────────
 
   async recordStart(mode: 'draft' | 'final' = 'draft', name?: string): Promise<AgentResponse> {

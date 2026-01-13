@@ -48,6 +48,7 @@
 import Cocoa
 import Carbon.HIToolbox
 import ApplicationServices
+import WebKit
 
 // MARK: - Accessibility Check
 
@@ -632,6 +633,479 @@ class TyperWindow: NSWindow {
     }
 }
 
+// MARK: - Label Window (scene info, storyboard notes)
+
+class LabelWindow: NSWindow {
+    let label = NSTextField(labelWithString: "")
+
+    init() {
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        super.init(contentRect: NSRect(x: 0, y: 0, width: screen.frame.width, height: 60),
+                   styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = NSColor.black.withAlphaComponent(0.85)
+        level = .floating  // Above normal windows but below viewport mask
+        ignoresMouseEvents = true
+        hasShadow = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        // Style the label
+        label.font = NSFont.systemFont(ofSize: 18, weight: .medium)
+        label.textColor = .white
+        label.alignment = .center
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 2
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView?.addSubview(label)
+        if let contentView = contentView {
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+                label.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 20),
+                label.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20)
+            ])
+        }
+
+        alphaValue = 0
+    }
+
+    func showLabel(text: String, position: String = "top", x: CGFloat? = nil, y: CGFloat? = nil, width: CGFloat? = nil) {
+        guard let screen = NSScreen.main else {
+            fputs("label: no screen!\n", stderr)
+            return
+        }
+
+        label.stringValue = text
+
+        // Calculate position
+        let labelWidth = width ?? screen.frame.width
+        let labelX: CGFloat
+        let labelY: CGFloat
+
+        if let customX = x, let customY = y {
+            // Custom x, y positioning (vif coords: top-left origin)
+            labelX = customX
+            labelY = screen.frame.height - customY - 60  // Convert to Cocoa coords
+            fputs("label: showing '\(text)' at custom (\(customX), \(customY))\n", stderr)
+        } else {
+            // Named position
+            labelX = 0
+            switch position {
+            case "bottom":
+                labelY = 20
+            case "top":
+                labelY = screen.frame.height - 80
+            default:
+                labelY = screen.frame.height - 80
+            }
+            fputs("label: showing '\(text)' at \(position)\n", stderr)
+        }
+
+        setFrame(NSRect(x: labelX, y: labelY, width: labelWidth, height: 60), display: true)
+        alphaValue = 1.0
+        makeKeyAndOrderFront(nil)
+    }
+
+    func hideLabel() {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            animator().alphaValue = 0
+        }) {
+            self.orderOut(nil)
+        }
+    }
+
+    func updateText(_ text: String) {
+        label.stringValue = text
+    }
+}
+
+// MARK: - Stage Utilities (clean recording environment)
+
+/// Saved state for restoration
+var savedVisibleApps: [String] = []
+var savedAppPositions: [String: (x: Int, y: Int, w: Int, h: Int)] = [:]
+
+/// Get list of currently visible apps
+func getVisibleApps() -> [String] {
+    let script = """
+    tell application "System Events"
+        set visibleApps to {}
+        repeat with p in (every process whose visible is true)
+            set end of visibleApps to name of p
+        end repeat
+        return visibleApps
+    end tell
+    """
+    var error: NSDictionary?
+    if let scriptObj = NSAppleScript(source: script),
+       let result = scriptObj.executeAndReturnError(&error).coerce(toDescriptorType: typeAEList) {
+        var apps: [String] = []
+        for i in 1...result.numberOfItems {
+            if let item = result.atIndex(i)?.stringValue {
+                apps.append(item)
+            }
+        }
+        return apps
+    }
+    return []
+}
+
+/// Save current app visibility state
+func saveAppState() {
+    savedVisibleApps = getVisibleApps()
+}
+
+/// Restore app visibility to saved state
+func restoreAppState() {
+    for appName in savedVisibleApps {
+        let script = """
+        tell application "System Events"
+            try
+                set visible of process "\(appName)" to true
+            end try
+        end tell
+        """
+        var error: NSDictionary?
+        if let scriptObj = NSAppleScript(source: script) {
+            scriptObj.executeAndReturnError(&error)
+        }
+    }
+    savedVisibleApps = []
+}
+
+/// Hide all apps except the specified one (saves state first)
+func hideOtherApps(_ keepApp: String, saveState: Bool = true) -> Bool {
+    if saveState {
+        saveAppState()
+    }
+    let script = """
+    tell application "System Events"
+        set visible of every process whose name is not "\(keepApp)" and name is not "Finder" to false
+    end tell
+    """
+    var error: NSDictionary?
+    if let scriptObj = NSAppleScript(source: script) {
+        scriptObj.executeAndReturnError(&error)
+        return error == nil
+    }
+    return false
+}
+
+/// Hide desktop icons
+func hideDesktopIcons() -> Bool {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+    task.arguments = ["write", "com.apple.finder", "CreateDesktop", "-bool", "false"]
+    try? task.run()
+    task.waitUntilExit()
+
+    // Restart Finder to apply
+    let killTask = Process()
+    killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+    killTask.arguments = ["Finder"]
+    try? killTask.run()
+    killTask.waitUntilExit()
+    return true
+}
+
+/// Show desktop icons
+func showDesktopIcons() -> Bool {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+    task.arguments = ["write", "com.apple.finder", "CreateDesktop", "-bool", "true"]
+    try? task.run()
+    task.waitUntilExit()
+
+    // Restart Finder to apply
+    let killTask = Process()
+    killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+    killTask.arguments = ["Finder"]
+    try? killTask.run()
+    killTask.waitUntilExit()
+    return true
+}
+
+// MARK: - Backdrop Window (web view behind target app)
+
+class BackdropWindow: NSWindow {
+    let webView: WKWebView
+
+    init() {
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+
+        // Configure web view
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+
+        webView = WKWebView(frame: screen.frame, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")  // Transparent background
+
+        super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .black
+        level = .normal
+        ignoresMouseEvents = true
+        hasShadow = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        contentView = webView
+        setFrameOrigin(screen.frame.origin)
+
+        // Load the backdrop HTML
+        loadBackdropHTML()
+    }
+
+    func loadBackdropHTML() {
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body {
+                    width: 100vw;
+                    height: 100vh;
+                    background: linear-gradient(135deg, #1e3a5f 0%, #2d1b4e 50%, #1a1a2e 100%);
+                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    color: white;
+                    overflow: hidden;
+                }
+                #root { width: 100%; height: 100%; position: relative; }
+
+                /* Label styles */
+                .label {
+                    position: absolute;
+                    padding: 12px 24px;
+                    background: rgba(0, 0, 0, 0.85);
+                    border-radius: 8px;
+                    font-size: 18px;
+                    font-weight: 500;
+                    transition: all 0.3s ease;
+                    opacity: 0;
+                }
+                .label.visible { opacity: 1; }
+
+                /* Callout styles */
+                .callout {
+                    position: absolute;
+                    padding: 16px 20px;
+                    background: rgba(59, 130, 246, 0.9);
+                    border-radius: 12px;
+                    font-size: 16px;
+                    max-width: 300px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                    transition: all 0.3s ease;
+                    opacity: 0;
+                }
+                .callout.visible { opacity: 1; }
+                .callout::before {
+                    content: '';
+                    position: absolute;
+                    width: 12px;
+                    height: 12px;
+                    background: inherit;
+                    transform: rotate(45deg);
+                }
+                .callout.arrow-left::before { left: -6px; top: 50%; margin-top: -6px; }
+                .callout.arrow-right::before { right: -6px; top: 50%; margin-top: -6px; }
+                .callout.arrow-top::before { top: -6px; left: 50%; margin-left: -6px; }
+                .callout.arrow-bottom::before { bottom: -6px; left: 50%; margin-left: -6px; }
+            </style>
+        </head>
+        <body>
+            <div id="root">
+                <div style="position:absolute; bottom:20px; right:20px; font-size:14px; opacity:0.5;">vif web backdrop</div>
+            </div>
+            <script>
+                const root = document.getElementById('root');
+                const elements = {};
+
+                // Connect to vif server
+                const ws = new WebSocket('ws://localhost:7850');
+
+                ws.onopen = () => {
+                    console.log('Backdrop connected to vif server');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.backdrop) handleBackdropCommand(msg.backdrop);
+                    } catch (e) {
+                        console.error('Parse error:', e);
+                    }
+                };
+
+                function handleBackdropCommand(cmd) {
+                    console.log('backdrop cmd:', cmd);
+                    const type = cmd.type || cmd.action;  // Support both
+                    switch (type) {
+                        case 'label':
+                            showLabel(cmd);
+                            break;
+                        case 'callout':
+                            showCallout(cmd);
+                            break;
+                        case 'hide':
+                            hideElement(cmd.elementId || cmd.id);
+                            break;
+                        case 'clear':
+                            clearAll();
+                            break;
+                        case 'html':
+                            renderHTML(cmd);
+                            break;
+                        case 'background':
+                            setBackground(cmd);
+                            break;
+                    }
+                }
+
+                function showLabel(cmd) {
+                    const elemId = cmd.elementId || cmd.id || 'label-' + Date.now();
+                    let el = elements[elemId];
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.className = 'label';
+                        el.id = elemId;
+                        root.appendChild(el);
+                        elements[elemId] = el;
+                    }
+                    el.textContent = cmd.text || '';
+                    el.style.left = (cmd.x || 0) + 'px';
+                    el.style.top = (cmd.y || 0) + 'px';
+                    if (cmd.width) el.style.width = cmd.width + 'px';
+                    if (cmd.fontSize) el.style.fontSize = cmd.fontSize + 'px';
+                    if (cmd.color) el.style.color = cmd.color;
+                    if (cmd.background) el.style.background = cmd.background;
+                    requestAnimationFrame(() => el.classList.add('visible'));
+                }
+
+                function showCallout(cmd) {
+                    const elemId = cmd.elementId || cmd.id || 'callout-' + Date.now();
+                    let el = elements[elemId];
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.className = 'callout';
+                        el.id = elemId;
+                        root.appendChild(el);
+                        elements[elemId] = el;
+                    }
+                    el.textContent = cmd.text || '';
+                    el.style.left = (cmd.x || 0) + 'px';
+                    el.style.top = (cmd.y || 0) + 'px';
+                    if (cmd.arrow) el.classList.add('arrow-' + cmd.arrow);
+                    requestAnimationFrame(() => el.classList.add('visible'));
+                }
+
+                function hideElement(elemId) {
+                    const el = elements[elemId];
+                    if (el) {
+                        el.classList.remove('visible');
+                        setTimeout(() => el.remove(), 300);
+                        delete elements[elemId];
+                    }
+                }
+
+                function clearAll() {
+                    Object.keys(elements).forEach(hideElement);
+                    root.innerHTML = '';
+                }
+
+                function renderHTML(cmd) {
+                    if (cmd.id && cmd.html) {
+                        let el = elements[cmd.id];
+                        if (!el) {
+                            el = document.createElement('div');
+                            el.id = cmd.id;
+                            root.appendChild(el);
+                            elements[cmd.id] = el;
+                        }
+                        el.innerHTML = cmd.html;
+                        if (cmd.style) Object.assign(el.style, cmd.style);
+                    }
+                }
+
+                function setBackground(cmd) {
+                    if (cmd.color) document.body.style.background = cmd.color;
+                    if (cmd.gradient) document.body.style.background = cmd.gradient;
+                    if (cmd.image) document.body.style.backgroundImage = 'url(' + cmd.image + ')';
+                }
+            </script>
+        </body>
+        </html>
+        """
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func showBackdrop(color: NSColor = .black) {
+        fputs("backdrop: showing (web)\n", stderr)
+        backgroundColor = color
+        makeKeyAndOrderFront(nil)
+    }
+
+    func hideBackdrop() {
+        fputs("backdrop: hiding\n", stderr)
+        orderOut(nil)
+    }
+
+    // Send a command to the web view
+    func sendCommand(_ cmd: [String: Any]) {
+        if let data = try? JSONSerialization.data(withJSONObject: cmd),
+           let json = String(data: data, encoding: .utf8) {
+            let js = "handleBackdropCommand(\(json))"
+            webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
+}
+
+/// Center an app window on screen
+func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> Bool {
+    guard let screen = NSScreen.main else { return false }
+
+    let script: String
+    if let w = width, let h = height {
+        let x = Int((screen.frame.width - w) / 2)
+        let y = Int((screen.frame.height - h) / 2)
+        script = """
+        tell application "System Events"
+            tell process "\(appName)"
+                set frontmost to true
+                set w to front window
+                set position of w to {\(x), \(y)}
+                set size of w to {\(Int(w)), \(Int(h))}
+            end tell
+        end tell
+        """
+    } else {
+        // Just center at current size
+        script = """
+        tell application "System Events"
+            tell process "\(appName)"
+                set frontmost to true
+                set w to front window
+                set s to size of w
+                set wWidth to item 1 of s
+                set wHeight to item 2 of s
+                set screenWidth to \(Int(screen.frame.width))
+                set screenHeight to \(Int(screen.frame.height))
+                set newX to (screenWidth - wWidth) / 2
+                set newY to (screenHeight - wHeight) / 2
+                set position of w to {newX, newY}
+            end tell
+        end tell
+        """
+    }
+
+    var error: NSDictionary?
+    if let scriptObj = NSAppleScript(source: script) {
+        scriptObj.executeAndReturnError(&error)
+        return error == nil
+    }
+    return false
+}
+
 // MARK: - Viewport Mask Window
 
 class ViewportMaskWindow: NSWindow {
@@ -809,10 +1283,20 @@ class ControlPanelWindow: NSWindow {
     func setRecording(_ recording: Bool) {
         panelView.setRecording(recording)
     }
+
+    func setState(_ state: ControlPanelView.State) {
+        panelView.setState(state)
+    }
 }
 
 class ControlPanelView: NSView {
-    var isRecording = false
+    enum State {
+        case idle      // Listening, nothing active
+        case active    // Overlays visible
+        case recording // Recording in progress
+    }
+
+    var state: State = .idle
     var pulseTimer: Timer?
     var dotAlpha: CGFloat = 1.0
     var onCloseClick: (() -> Void)?
@@ -823,37 +1307,51 @@ class ControlPanelView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Background rounded rect
+        // Background rounded rect with subtle border
         let bgPath = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
-        NSColor(white: 0.1, alpha: 0.9).setFill()
+        NSColor(white: 0.08, alpha: 0.95).setFill()
         bgPath.fill()
+        NSColor(white: 0.25, alpha: 0.5).setStroke()
+        bgPath.lineWidth = 0.5
+        bgPath.stroke()
 
-        let smallFont = NSFont.systemFont(ofSize: 10, weight: .medium)
-        let labelFont = NSFont.systemFont(ofSize: 11, weight: .bold)
+        // Brand: "vif" in stylized font
+        let brandFont = NSFont.systemFont(ofSize: 16, weight: .bold)
+        let brandAttrs: [NSAttributedString.Key: Any] = [
+            .font: brandFont,
+            .foregroundColor: NSColor.white
+        ]
+        ("vif" as NSString).draw(at: NSPoint(x: 14, y: bounds.height - 28), withAttributes: brandAttrs)
 
-        // Row 1: Recording status or "vif active"
-        if isRecording {
-            // Red dot
-            let dotRect = NSRect(x: 12, y: bounds.height - 22, width: 8, height: 8)
+        // State indicator (dot + label)
+        let dotRect = NSRect(x: 50, y: bounds.height - 22, width: 8, height: 8)
+        let stateFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+
+        switch state {
+        case .recording:
+            // Red pulsing dot + "REC"
             NSColor.systemRed.withAlphaComponent(dotAlpha).setFill()
             NSBezierPath(ovalIn: dotRect).fill()
+            let attrs: [NSAttributedString.Key: Any] = [.font: stateFont, .foregroundColor: NSColor.systemRed]
+            ("REC" as NSString).draw(at: NSPoint(x: 64, y: bounds.height - 24), withAttributes: attrs)
 
-            // "REC" label
-            let recAttrs: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: NSColor.systemRed]
-            ("REC" as NSString).draw(at: NSPoint(x: 26, y: bounds.height - 24), withAttributes: recAttrs)
-        } else {
-            // Green dot for active
-            let dotRect = NSRect(x: 12, y: bounds.height - 22, width: 8, height: 8)
+        case .active:
+            // Green dot + "ready"
             NSColor.systemGreen.setFill()
             NSBezierPath(ovalIn: dotRect).fill()
+            let attrs: [NSAttributedString.Key: Any] = [.font: stateFont, .foregroundColor: NSColor.systemGreen]
+            ("ready" as NSString).draw(at: NSPoint(x: 64, y: bounds.height - 24), withAttributes: attrs)
 
-            // "vif" label
-            let vifAttrs: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: NSColor.white]
-            ("vif" as NSString).draw(at: NSPoint(x: 26, y: bounds.height - 24), withAttributes: vifAttrs)
+        case .idle:
+            // Gray dot + "idle"
+            NSColor(white: 0.5, alpha: 1.0).setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
+            let attrs: [NSAttributedString.Key: Any] = [.font: stateFont, .foregroundColor: NSColor(white: 0.5, alpha: 1.0)]
+            ("idle" as NSString).draw(at: NSPoint(x: 64, y: bounds.height - 24), withAttributes: attrs)
         }
 
         // X close button (top-right)
-        let xColor = closeButtonHovered ? NSColor.white : NSColor(white: 0.5, alpha: 1.0)
+        let xColor = closeButtonHovered ? NSColor.white : NSColor(white: 0.4, alpha: 1.0)
         let xFont = NSFont.systemFont(ofSize: 14, weight: .medium)
         let xAttrs: [NSAttributedString.Key: Any] = [.font: xFont, .foregroundColor: xColor]
         let xStr = "✕"
@@ -864,8 +1362,9 @@ class ControlPanelView: NSView {
         ), withAttributes: xAttrs)
 
         // Row 2: ESC hint
-        let escAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: NSColor(white: 0.6, alpha: 1.0)]
-        ("ESC to dismiss" as NSString).draw(at: NSPoint(x: 12, y: 10), withAttributes: escAttrs)
+        let smallFont = NSFont.systemFont(ofSize: 10, weight: .regular)
+        let escAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: NSColor(white: 0.45, alpha: 1.0)]
+        ("ESC to dismiss" as NSString).draw(at: NSPoint(x: 14, y: 10), withAttributes: escAttrs)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -897,14 +1396,19 @@ class ControlPanelView: NSView {
         ))
     }
 
-    func setRecording(_ recording: Bool) {
-        isRecording = recording
-        if recording {
+    func setState(_ newState: State) {
+        state = newState
+        if newState == .recording {
             startPulsing()
         } else {
             stopPulsing()
         }
         needsDisplay = true
+    }
+
+    // Legacy method for compatibility
+    func setRecording(_ recording: Bool) {
+        setState(recording ? .recording : .active)
     }
 
     func startPulsing() {
@@ -1124,6 +1628,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
     lazy var typerWindow = TyperWindow()
     lazy var sceneIndicator = SceneIndicatorWindow()
     lazy var viewportMask = ViewportMaskWindow()
+    lazy var backdrop = BackdropWindow()
+    lazy var labelWindow = LabelWindow()
     lazy var recorder = ScreenRecorder()
     lazy var controlPanel = ControlPanelWindow()
 
@@ -1166,10 +1672,38 @@ class VifAgent: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Check if any overlay is currently visible
+    func anyOverlayVisible() -> Bool {
+        return cursorWindow.isVisible ||
+               viewportMask.isVisible ||
+               backdrop.isVisible ||
+               labelWindow.isVisible ||
+               keysWindow.isVisible ||
+               typerWindow.isVisible ||
+               recorder.status().recording
+    }
+
+    /// Update control panel visibility and state based on overlay state
+    func updateControlPanel() {
+        if anyOverlayVisible() {
+            controlPanel.showPanel()
+            // Set state based on what's happening
+            if recorder.status().recording {
+                controlPanel.setState(.recording)
+            } else {
+                controlPanel.setState(.active)
+            }
+        } else {
+            controlPanel.hidePanel()
+        }
+    }
+
     func dismissAll() {
         DispatchQueue.main.async {
             self.cursorWindow.hideCursor()
             self.viewportMask.hideMask()
+            self.backdrop.hideBackdrop()
+            self.labelWindow.hideLabel()
             self.keysWindow.hideKeys()
             self.typerWindow.hideTyper()
             self.controlPanel.hidePanel()
@@ -1206,6 +1740,10 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handleTyper(cmd, json)
         case "viewport":
             handleViewport(cmd, json)
+        case "stage":
+            handleStage(cmd, json)
+        case "label":
+            handleLabel(cmd, json)
         case "record":
             handleRecord(cmd, json)
         default:
@@ -1225,10 +1763,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
             controlPanel.showPanel()
         case "hide":
             cursorWindow.hideCursor()
-            // Only hide control panel if nothing else is visible
-            if !viewportMask.isVisible {
-                controlPanel.hidePanel()
-            }
+            updateControlPanel()
         case "moveTo":
             let x = (json["x"] as? NSNumber)?.doubleValue ?? 0
             let y = (json["y"] as? NSNumber)?.doubleValue ?? 0
@@ -1322,13 +1857,126 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
         case "hide":
             viewportMask.hideMask()
-            // Only hide control panel if cursor isn't visible
-            if !cursorWindow.isVisible {
-                controlPanel.hidePanel()
-            }
+            updateControlPanel()
 
         default:
             respond(["ok": false, "error": "unknown viewport cmd: \(cmd)"])
+            return
+        }
+        respond(["ok": true])
+    }
+
+    func handleStage(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "set":
+            // Set up a clean stage: show backdrop, hide other apps, center the target app
+            guard let app = json["app"] as? String else {
+                respond(["ok": false, "error": "stage.set requires app name"])
+                return
+            }
+
+            // Show solid backdrop first (covers everything)
+            backdrop.showBackdrop()
+
+            // Small delay to let backdrop appear, then hide other apps and center
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Hide other apps (this saves their state for restoration)
+                let _ = hideOtherApps(app)
+
+                // Center the app window if width/height specified, otherwise just center at current size
+                let width = (json["width"] as? NSNumber)?.doubleValue
+                let height = (json["height"] as? NSNumber)?.doubleValue
+                let _ = centerAppWindow(app, width: width.map { CGFloat($0) }, height: height.map { CGFloat($0) })
+
+                // Optionally hide desktop icons
+                if json["hideDesktop"] as? Bool == true {
+                    let _ = hideDesktopIcons()
+                }
+            }
+
+        case "clear":
+            // Restore everything: hide backdrop, restore app visibility
+            backdrop.hideBackdrop()
+            restoreAppState()
+            let _ = showDesktopIcons()
+
+        case "backdrop":
+            // Just show/hide backdrop
+            if json["show"] as? Bool == true {
+                backdrop.showBackdrop()
+                controlPanel.showPanel()
+            } else {
+                backdrop.hideBackdrop()
+                updateControlPanel()
+            }
+
+        case "render":
+            // Render content in the web backdrop
+            // Extract just the render params, not the full command
+            var renderCmd = json
+            renderCmd.removeValue(forKey: "action")
+            fputs("stage.render: \(renderCmd)\n", stderr)
+            backdrop.sendCommand(renderCmd)
+
+        case "hideDesktop":
+            let _ = hideDesktopIcons()
+
+        case "showDesktop":
+            let _ = showDesktopIcons()
+
+        case "center":
+            // Just center an app window
+            guard let app = json["app"] as? String else {
+                respond(["ok": false, "error": "stage.center requires app name"])
+                return
+            }
+            let width = (json["width"] as? NSNumber)?.doubleValue
+            let height = (json["height"] as? NSNumber)?.doubleValue
+            let _ = centerAppWindow(app, width: width.map { CGFloat($0) }, height: height.map { CGFloat($0) })
+
+        case "hideOthers":
+            // Just hide other apps (saves state)
+            guard let app = json["app"] as? String else {
+                respond(["ok": false, "error": "stage.hideOthers requires app name"])
+                return
+            }
+            let _ = hideOtherApps(app)
+
+        case "restore":
+            // Just restore app visibility without clearing backdrop
+            restoreAppState()
+
+        default:
+            respond(["ok": false, "error": "unknown stage cmd: \(cmd)"])
+            return
+        }
+        respond(["ok": true])
+    }
+
+    func handleLabel(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "show":
+            let text = json["text"] as? String ?? ""
+            let position = json["position"] as? String ?? "top"
+            let x = (json["x"] as? NSNumber)?.doubleValue
+            let y = (json["y"] as? NSNumber)?.doubleValue
+            let width = (json["width"] as? NSNumber)?.doubleValue
+            labelWindow.showLabel(text: text, position: position,
+                                  x: x.map { CGFloat($0) },
+                                  y: y.map { CGFloat($0) },
+                                  width: width.map { CGFloat($0) })
+            controlPanel.showPanel()
+
+        case "hide":
+            labelWindow.hideLabel()
+            updateControlPanel()
+
+        case "update":
+            let text = json["text"] as? String ?? ""
+            labelWindow.updateText(text)
+
+        default:
+            respond(["ok": false, "error": "unknown label cmd: \(cmd)"])
             return
         }
         respond(["ok": true])

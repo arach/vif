@@ -334,6 +334,10 @@ export class JsonRpcServer {
         return this.handleTyperCommand(id, method, cmd);
       case 'viewport':
         return this.handleViewportCommand(id, method, cmd);
+      case 'label':
+        return this.handleLabelCommand(id, method, cmd);
+      case 'stage':
+        return this.handleStageCommand(id, method, cmd);
       case 'record':
         return this.handleRecordCommand(id, method, cmd);
       default:
@@ -466,6 +470,34 @@ export class JsonRpcServer {
     }
   }
 
+  private async handleLabelCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'show': {
+        const text = cmd.text as string || '';
+        const options: { position?: 'top' | 'bottom'; x?: number; y?: number; width?: number } = {};
+        if (cmd.position) options.position = cmd.position as 'top' | 'bottom';
+        if (typeof cmd.x === 'number') options.x = cmd.x;
+        if (typeof cmd.y === 'number') options.y = cmd.y;
+        if (typeof cmd.width === 'number') options.width = cmd.width;
+        await this.agent!.labelShow(text, options);
+        return { id, ok: true };
+      }
+
+      case 'hide':
+        await this.agent!.labelHide();
+        return { id, ok: true };
+
+      case 'update': {
+        const text = cmd.text as string || '';
+        await this.agent!.labelUpdate(text);
+        return { id, ok: true };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown label method: ${method}` };
+    }
+  }
+
   private async handleRecordCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
     switch (method) {
       case 'start': {
@@ -506,6 +538,64 @@ export class JsonRpcServer {
 
       default:
         return { id, ok: false, error: `Unknown record method: ${method}` };
+    }
+  }
+
+  private async handleStageCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'set': {
+        const app = cmd.app as string;
+        if (!app) return { id, ok: false, error: 'stage.set requires app name' };
+        const width = cmd.width as number | undefined;
+        const height = cmd.height as number | undefined;
+        const hideDesktop = cmd.hideDesktop as boolean | undefined;
+        await this.agent!.stageSet(app, width, height, hideDesktop);
+        return { id, ok: true };
+      }
+
+      case 'clear':
+        await this.agent!.stageClear();
+        return { id, ok: true };
+
+      case 'center': {
+        const app = cmd.app as string;
+        if (!app) return { id, ok: false, error: 'stage.center requires app name' };
+        const width = cmd.width as number | undefined;
+        const height = cmd.height as number | undefined;
+        await this.agent!.stageCenter(app, width, height);
+        return { id, ok: true };
+      }
+
+      case 'hideOthers': {
+        const app = cmd.app as string;
+        if (!app) return { id, ok: false, error: 'stage.hideOthers requires app name' };
+        await this.agent!.stageHideOthers(app);
+        return { id, ok: true };
+      }
+
+      case 'hideDesktop':
+        await this.agent!.stageHideDesktop();
+        return { id, ok: true };
+
+      case 'showDesktop':
+        await this.agent!.stageShowDesktop();
+        return { id, ok: true };
+
+      case 'backdrop': {
+        const show = cmd.show as boolean;
+        await this.agent!.stageBackdrop(show);
+        return { id, ok: true };
+      }
+
+      case 'render': {
+        // Pass render command to web backdrop
+        const { action: _a, id: _id, ...params } = cmd;
+        await this.agent!.stageRender(params);
+        return { id, ok: true };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown stage method: ${method}` };
     }
   }
 

@@ -1,0 +1,19 @@
+{
+  "baseUrl": "https://vif.jdi.sh",
+  "auditedAt": "2026-01-13T00:29:41.157Z",
+  "totalPages": 1,
+  "averageScore": 100,
+  "pages": [
+    {
+      "url": "https://vif.jdi.sh/",
+      "path": "/",
+      "score": 100,
+      "titleLength": 32,
+      "descriptionLength": 94,
+      "image": "https://vif.jdi.sh/og-image.png",
+      "imageSize": 111,
+      "imageDimensions": "1200x630",
+      "issues": []
+    }
+  ]
+}
