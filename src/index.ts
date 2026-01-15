@@ -17,6 +17,7 @@ export interface WindowInfo {
   id: number;
   owner: string;
   name: string;
+  pid: number;
   bounds: {
     x: number;
     y: number;
@@ -98,6 +99,7 @@ struct WindowData: Codable {
     let id: Int
     let owner: String
     let name: String
+    let pid: Int
     let bounds: WindowBounds
 }
 
@@ -109,6 +111,7 @@ for window in windowList {
     let ownerName = window[kCGWindowOwnerName as String] as? String ?? ""
     let windowID = window[kCGWindowNumber as String] as? Int ?? 0
     let windowName = window[kCGWindowName as String] as? String ?? ""
+    let ownerPID = window[kCGWindowOwnerPID as String] as? Int ?? 0
     let rawBounds = window[kCGWindowBounds as String] as? [String: Any] ?? [:]
 
     let bounds = WindowBounds(
@@ -123,7 +126,7 @@ for window in windowList {
         continue
     }
 
-    windows.append(WindowData(id: windowID, owner: ownerName, name: windowName, bounds: bounds))
+    windows.append(WindowData(id: windowID, owner: ownerName, name: windowName, pid: ownerPID, bounds: bounds))
 }
 
 let encoder = JSONEncoder()
@@ -179,6 +182,86 @@ export function activateApp(appName: string): void {
     execSync('sleep 0.3');
   } catch {
     // App might not support AppleScript, continue anyway
+  }
+}
+
+export interface LaunchResult {
+  window: WindowInfo;
+  pid: number;
+}
+
+/**
+ * Launch an app fresh - kills existing instances and opens a new one
+ * @param appName Application name (e.g., "Talkie")
+ * @param options.waitMs Time to wait for app to start (default 2000ms)
+ * @param options.path Optional path to specific app bundle
+ * @returns Window info if successful, null otherwise
+ */
+export function launchApp(appName: string, options: { waitMs?: number; path?: string } = {}): WindowInfo | null {
+  const { waitMs = 2000, path } = options;
+
+  try {
+    // Kill any existing instances
+    try {
+      execSync(`pkill -f "${appName}"`, { timeout: 5000 });
+      execSync('sleep 1');
+    } catch {
+      // pkill returns error if no process found, that's ok
+    }
+
+    // Open a new instance (-n forces new instance)
+    // Use path if provided, otherwise use app name
+    const target = path ? `"${path}"` : `-a "${appName}"`;
+    execSync(`open -n ${target}`, { timeout: 10000 });
+
+    // Wait for app to start
+    execSync(`sleep ${waitMs / 1000}`);
+
+    // Get the PID of our launched instance
+    let pid: number | null = null;
+    try {
+      const pidOutput = execSync(`pgrep -n -f "${appName}.app"`, { encoding: 'utf-8', timeout: 5000 });
+      pid = parseInt(pidOutput.trim(), 10);
+    } catch {
+      // If pgrep fails, we'll fall back to name-based matching
+    }
+
+    // Activate to bring to front
+    execSync(`osascript -e 'tell application "${appName}" to activate'`, { timeout: 5000 });
+    execSync('sleep 0.5');
+
+    // Find windows - prefer matching by PID if we have one
+    const allWindows = getWindows();
+    let windows: WindowInfo[];
+
+    if (pid) {
+      // Filter by our PID first
+      windows = allWindows.filter(w => w.pid === pid);
+      if (windows.length === 0) {
+        // Fallback to name matching if no PID match (some apps have helper processes)
+        windows = allWindows.filter(w =>
+          w.owner.toLowerCase().includes(appName.toLowerCase()) ||
+          w.name.toLowerCase().includes(appName.toLowerCase())
+        );
+      }
+    } else {
+      windows = allWindows.filter(w =>
+        w.owner.toLowerCase().includes(appName.toLowerCase()) ||
+        w.name.toLowerCase().includes(appName.toLowerCase())
+      );
+    }
+
+    if (windows.length > 0) {
+      // Find the main window (usually the one with matching name, or largest)
+      const mainWindow = windows.find(w => w.name === appName) ||
+                         windows.sort((a, b) => (b.bounds.width * b.bounds.height) - (a.bounds.width * a.bounds.height))[0];
+      return mainWindow;
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`Failed to launch ${appName}:`, error);
+    return null;
   }
 }
 

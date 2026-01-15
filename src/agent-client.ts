@@ -5,7 +5,7 @@
  * keyboard, and typing overlays.
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
@@ -22,6 +22,14 @@ const AGENT_PATHS = [
   join(__dirname, '..', 'dist', 'Vif Agent.app', 'Contents', 'MacOS', 'vif-agent'),
   // Production: ~/.vif install
   join(homedir(), '.vif', 'Vif Agent.app', 'Contents', 'MacOS', 'vif-agent'),
+];
+
+// App bundle locations (for `open` launch)
+const APP_BUNDLE_PATHS = [
+  // Development: local build
+  join(__dirname, '..', 'dist', 'Vif Agent.app'),
+  // Production: ~/.vif install
+  join(homedir(), '.vif', 'Vif Agent.app'),
 ];
 
 export interface AgentResponse {
@@ -48,10 +56,48 @@ export class VifAgent extends EventEmitter {
   }
 
   /**
+   * Find the app bundle (for launching with `open`)
+   */
+  static findAppBundle(): string | null {
+    for (const p of APP_BUNDLE_PATHS) {
+      if (existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  /**
    * Check if agent is available
    */
   static isAvailable(): boolean {
     return VifAgent.findBinary() !== null;
+  }
+
+  /**
+   * Launch agent as independent app (not tied to terminal)
+   * Uses `open` command so it gets its own screen recording permission
+   */
+  static launchIndependent(): void {
+    const appBundle = VifAgent.findAppBundle();
+    if (!appBundle) {
+      throw new Error('Vif Agent.app not found');
+    }
+    // Launch with open -g (don't bring to foreground)
+    execSync(`open -g "${appBundle}"`, { stdio: 'ignore' });
+  }
+
+  /**
+   * Check if agent is already running (by checking for process)
+   */
+  static isRunning(): boolean {
+    try {
+      const result = execSync('pgrep -f "Vif Agent.app/Contents/MacOS/vif-agent"', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return result.trim().length > 0;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -66,7 +112,11 @@ export class VifAgent extends EventEmitter {
     return new Promise((resolve, reject) => {
       this.process = spawn(binary, [], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,  // Run independently of terminal
       });
+
+      // Don't keep parent alive waiting for this child
+      this.process.unref();
 
       this.rl = readline.createInterface({
         input: this.process.stdout!,
@@ -299,12 +349,25 @@ export class VifAgent extends EventEmitter {
     await this.send({ action: 'stage.showDesktop' });
   }
 
-  async stageBackdrop(show: boolean): Promise<void> {
-    await this.send({ action: 'stage.backdrop', show });
+  async stageBackdrop(show: boolean, type?: string): Promise<void> {
+    await this.send({ action: 'stage.backdrop', show, type });
   }
 
   async stageRender(params: Record<string, unknown>): Promise<void> {
     await this.send({ action: 'stage.render', ...params });
+  }
+
+  async stageActivate(app: string): Promise<void> {
+    await this.send({ action: 'stage.activate', app });
+  }
+
+  async stageSetup(config: {
+    backdrop?: string;
+    app?: { name: string; width?: number; height?: number };
+    viewport?: { padding?: number };
+    entry?: { timing?: number };
+  }): Promise<AgentResponse> {
+    return await this.send({ action: 'stage.setup', ...config });
   }
 
   // ─── Recording Commands ───────────────────────────────────────────
@@ -337,6 +400,91 @@ export class VifAgent extends EventEmitter {
 
   async panelHeadless(enabled: boolean): Promise<void> {
     await this.send({ action: 'panel.headless', enabled });
+  }
+
+  async panelTargetMode(mode: string): Promise<void> {
+    await this.send({ action: 'panel.targetMode', mode });
+  }
+
+  async panelScene(name: string | null): Promise<void> {
+    await this.send({ action: 'panel.scene', name: name ?? '' });
+  }
+
+  async panelAction(text: string): Promise<void> {
+    await this.send({ action: 'panel.action', text });
+  }
+
+  async panelProgress(current: number, total: number): Promise<void> {
+    await this.send({ action: 'panel.progress', current, total });
+  }
+
+  async panelRecordingPath(path: string): Promise<void> {
+    await this.send({ action: 'panel.recordingPath', path });
+  }
+
+  // Countdown methods
+  async countdownStart(count: number = 3): Promise<void> {
+    await this.send({ action: 'countdown.start', count });
+  }
+
+  async countdownCancel(): Promise<void> {
+    await this.send({ action: 'countdown.cancel' });
+  }
+
+  // Cue sound methods
+  async cuePlay(sound: string, wait: boolean = false): Promise<void> {
+    await this.send({ action: 'cue.play', sound, wait });
+  }
+
+  async cueStop(): Promise<void> {
+    await this.send({ action: 'cue.stop' });
+  }
+
+  // Zoom methods
+  async zoomStart(config: {
+    type?: 'crop' | 'lens';
+    level: number;
+    target?: 'cursor' | { x: number; y: number };
+    in?: { duration: number; easing: string };
+    out?: { duration: number; easing: string };
+    hold?: number | 'auto';
+    size?: number;
+    border?: boolean;
+    shadow?: boolean;
+  }): Promise<AgentResponse & { zooming?: boolean }> {
+    return await this.send({ action: 'zoom.start', ...config });
+  }
+
+  async zoomEnd(config?: {
+    duration?: number;
+    easing?: string;
+  }): Promise<AgentResponse & { duration?: number }> {
+    return await this.send({ action: 'zoom.end', ...config });
+  }
+
+  async zoomStatus(): Promise<AgentResponse & { active?: boolean; type?: string; level?: number }> {
+    return await this.send({ action: 'zoom.status' });
+  }
+
+  // Debug HUD methods
+  async debugShow(x?: number, y?: number, width?: number): Promise<void> {
+    if (x !== undefined && y !== undefined && width !== undefined) {
+      await this.send({ action: 'debug.show', x, y, width });
+    } else {
+      await this.send({ action: 'debug.show' });
+    }
+  }
+
+  async debugHide(): Promise<void> {
+    await this.send({ action: 'debug.hide' });
+  }
+
+  async debugUpdate(data: Record<string, string>): Promise<void> {
+    await this.send({ action: 'debug.update', ...data });
+  }
+
+  async debugClear(): Promise<void> {
+    await this.send({ action: 'debug.clear' });
   }
 }
 

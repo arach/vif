@@ -166,7 +166,10 @@ export class Recorder extends EventEmitter {
         }
       };
 
-      proc.on('close', cleanup);
+      proc.on('close', () => {
+        // Give screencapture time to finalize the file
+        setTimeout(cleanup, 500);
+      });
       proc.on('error', (err) => {
         if (!resolved) {
           resolved = true;
@@ -175,19 +178,24 @@ export class Recorder extends EventEmitter {
         }
       });
 
-      // Send SIGINT to stop recording gracefully
-      proc.kill('SIGINT');
+      // Send SIGINT to stop recording gracefully using explicit PID
+      // This ensures the signal goes to screencapture, not Node
+      if (proc.pid) {
+        process.kill(proc.pid, 'SIGINT');
+      } else {
+        proc.kill('SIGINT');
+      }
 
-      // Fallback timeout - screencapture should stop within 2 seconds
+      // Fallback timeout - screencapture should stop within 5 seconds
       setTimeout(() => {
         if (!resolved) {
           // Force kill if still running
-          if (proc.exitCode === null) {
-            proc.kill('SIGKILL');
+          if (proc.exitCode === null && proc.pid) {
+            process.kill(proc.pid, 'SIGKILL');
           }
           cleanup();
         }
-      }, 2000);
+      }, 5000);
     });
   }
 

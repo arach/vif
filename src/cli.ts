@@ -3,7 +3,11 @@
  * Vif CLI - Vivid screen capture for macOS
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawn, ChildProcess } from 'child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+import WebSocket from 'ws';
 import {
   getWindows,
   screenshot,
@@ -38,6 +42,184 @@ import { executeDemo, saveDemoRecording, hasCursorControl, DemoScript, DemoActio
 import { startServer } from './server.js';
 import { runScene, SceneParser } from './dsl/index.js';
 import { Recorder, recordDuration } from './recorder/index.js';
+
+// -------------------------------------------------------------------
+// Server Management Helpers
+// -------------------------------------------------------------------
+const VIF_DIR = join(homedir(), '.vif');
+const PID_FILE = join(VIF_DIR, 'server.pid');
+const DEFAULT_PORT = 7850;
+
+function ensureVifDir() {
+  if (!existsSync(VIF_DIR)) {
+    mkdirSync(VIF_DIR, { recursive: true });
+  }
+}
+
+function getServerPid(): number | null {
+  try {
+    if (existsSync(PID_FILE)) {
+      const pid = parseInt(readFileSync(PID_FILE, 'utf8').trim(), 10);
+      // Check if process is still running
+      try {
+        process.kill(pid, 0);
+        return pid;
+      } catch {
+        // Process not running, clean up stale PID file
+        unlinkSync(PID_FILE);
+        return null;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function saveServerPid(pid: number) {
+  ensureVifDir();
+  writeFileSync(PID_FILE, pid.toString());
+}
+
+function clearServerPid() {
+  try {
+    if (existsSync(PID_FILE)) {
+      unlinkSync(PID_FILE);
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+async function isServerRunning(port: number = DEFAULT_PORT): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://localhost:${port}`);
+    const timeout = setTimeout(() => {
+      ws.close();
+      resolve(false);
+    }, 1000);
+
+    ws.on('open', () => {
+      clearTimeout(timeout);
+      ws.close();
+      resolve(true);
+    });
+
+    ws.on('error', () => {
+      clearTimeout(timeout);
+      resolve(false);
+    });
+  });
+}
+
+async function waitForServer(port: number = DEFAULT_PORT, maxWait: number = 10000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    if (await isServerRunning(port)) {
+      return true;
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
+}
+
+let serverProcess: ChildProcess | null = null;
+
+async function ensureServer(port: number = DEFAULT_PORT, quiet: boolean = false): Promise<void> {
+  // Check if server is already running
+  if (await isServerRunning(port)) {
+    if (!quiet) {
+      console.log('✓ Server already running');
+    }
+    return;
+  }
+
+  // Check for existing PID
+  const existingPid = getServerPid();
+  if (existingPid) {
+    // Server PID exists but isn't responding - kill it
+    try {
+      process.kill(existingPid, 'SIGTERM');
+      await new Promise(r => setTimeout(r, 500));
+    } catch {
+      // Process might already be dead
+    }
+    clearServerPid();
+  }
+
+  if (!quiet) {
+    console.log('Starting vif server...');
+  }
+
+  // Find our CLI path
+  const cliPath = process.argv[1];
+
+  // Spawn server as background process with all stdio ignored
+  // to avoid blocking and allow clean detachment
+  serverProcess = spawn('node', [cliPath, 'serve', '--port', port.toString()], {
+    detached: true,
+    stdio: 'ignore'
+  });
+
+  if (serverProcess.pid) {
+    saveServerPid(serverProcess.pid);
+    if (!quiet) {
+      console.log(`Server starting (PID: ${serverProcess.pid})...`);
+    }
+  }
+
+  // Detach from parent process
+  serverProcess.unref();
+
+  // Wait for server to be ready
+  const ready = await waitForServer(port, 8000);
+  if (!ready) {
+    throw new Error('Server failed to start within timeout');
+  }
+
+  if (!quiet) {
+    console.log('✓ Server started\n');
+  }
+}
+
+async function stopServer(): Promise<boolean> {
+  const pid = getServerPid();
+  if (!pid) {
+    // Try to find by port
+    try {
+      const result = execSync(`lsof -ti:${DEFAULT_PORT} 2>/dev/null || true`, { encoding: 'utf8' }).trim();
+      if (result) {
+        const pids = result.split('\n').map(p => parseInt(p, 10)).filter(p => !isNaN(p));
+        for (const p of pids) {
+          try {
+            process.kill(p, 'SIGTERM');
+          } catch {
+            // Ignore
+          }
+        }
+        clearServerPid();
+        return pids.length > 0;
+      }
+    } catch {
+      // Ignore
+    }
+    return false;
+  }
+
+  try {
+    process.kill(pid, 'SIGTERM');
+    clearServerPid();
+
+    // Wait for process to exit
+    await new Promise(r => setTimeout(r, 500));
+    return true;
+  } catch {
+    clearServerPid();
+    return false;
+  }
+}
+
+// -------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -90,8 +272,9 @@ Cache Commands:
   cache clear                  Clear the asset cache
 
 Server Commands:
-  serve                        Start automation server (ws://localhost:7850)
-  serve --port <n>             Start on custom port
+  serve                        Start automation server (foreground)
+  status                       Check if vif server is running
+  stop                         Stop the vif server
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -924,17 +1107,53 @@ async function main() {
       break;
     }
 
+    case 'status': {
+      const pid = getServerPid();
+      const running = await isServerRunning();
+
+      console.log('vif server status');
+      console.log('─'.repeat(30));
+
+      if (running) {
+        console.log(`  Status: ✓ Running`);
+        if (pid) {
+          console.log(`  PID: ${pid}`);
+        }
+        console.log(`  Port: ${DEFAULT_PORT}`);
+        console.log(`  Endpoint: ws://localhost:${DEFAULT_PORT}`);
+      } else {
+        console.log(`  Status: ✗ Not running`);
+        console.log('');
+        console.log('Start with: vif serve');
+        console.log('Or just run: vif play <scene.yaml>');
+      }
+      break;
+    }
+
+    case 'stop': {
+      console.log('Stopping vif server...');
+      const stopped = await stopServer();
+
+      if (stopped) {
+        console.log('✓ Server stopped');
+      } else {
+        console.log('Server was not running');
+      }
+      break;
+    }
+
     case 'play': {
       const sceneFile = opts._positional as string;
 
       if (!sceneFile) {
-        console.error('Usage: vif play <scene.yaml> [--verbose] [--validate] [--watch]');
+        console.error('Usage: vif play <scene.yaml> [--verbose] [--validate] [--watch] [--debug]');
         process.exit(1);
       }
 
       const verbose = opts.verbose === true || opts.v === true;
       const validate = opts.validate === true;
       const watch = opts.watch === true;
+      const debug = opts.debug === true || opts.d === true;
 
       if (validate) {
         // Validate only - parse and report
@@ -953,6 +1172,14 @@ async function main() {
         break;
       }
 
+      // Auto-start server before running scene
+      try {
+        await ensureServer(DEFAULT_PORT, !verbose);
+      } catch (err: any) {
+        console.error(`Failed to start server: ${err.message}`);
+        process.exit(1);
+      }
+
       if (watch) {
         // Watch mode - re-run on file changes
         const { watch: watchFile } = await import('fs');
@@ -961,7 +1188,7 @@ async function main() {
 
         const runOnce = async () => {
           try {
-            await runScene(sceneFile, { verbose });
+            await runScene(sceneFile, { verbose, debug });
           } catch (err: any) {
             console.error(`Error: ${err.message}`);
           }
@@ -984,7 +1211,7 @@ async function main() {
 
       // Normal run
       try {
-        await runScene(sceneFile, { verbose });
+        await runScene(sceneFile, { verbose, debug });
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);

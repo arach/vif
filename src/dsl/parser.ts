@@ -14,15 +14,33 @@ export interface Scene {
   name: string;
   output?: string;
   mode?: 'draft' | 'final';
+  targets?: 'connected' | 'standalone' | 'auto';  // Target resolution mode
+  countdown?: boolean | number;  // Enable countdown before recording (true = 3 seconds, or specify count)
+  cues?: {
+    start?: string;  // Sound file to play before recording starts
+    end?: string;    // Sound file to play when scene completes
+    tick?: string;   // Sound file to play on each countdown tick (default: tick.mp3)
+  };
 }
 
 export interface App {
   type?: 'native' | 'react' | 'webpage' | 'electron';
   name: string;
+  path?: string;  // Optional path to specific app bundle
   window?: {
     width?: number;
     height?: number;
     center?: boolean;
+  };
+}
+
+export interface EntryTiming {
+  timing?: number;  // Default ms per layer (default: 300)
+  layers?: {
+    backdrop?: number;   // Z1 - backdrop appear
+    app?: number;        // Z2 - app center/position
+    viewport?: number;   // Z4 - viewport frame
+    controls?: number;   // Z5 - controls ready
   };
 }
 
@@ -36,6 +54,7 @@ export interface Stage {
     width?: number;
     height?: number;
   };
+  entry?: number | EntryTiming;  // Choreographed entry timing (ms per layer or detailed config)
 }
 
 export interface ViewItem {
@@ -60,6 +79,41 @@ export interface LabelDef {
   text?: string;
   style?: LabelStyle;
 }
+
+// Easing types for animations
+export type EasingType =
+  | 'linear'
+  | 'ease-in'
+  | 'ease-out'
+  | 'ease-in-out'
+  | 'spring'
+  | { type: 'spring'; tension?: number; friction?: number }
+  | { type: 'cubic-bezier'; values: [number, number, number, number] };
+
+// Zoom transition timing
+export interface ZoomTransition {
+  duration?: number | string;  // Duration in ms or "0.3s"
+  easing?: EasingType;
+}
+
+// Zoom action - supports both crop and lens styles
+export interface ZoomAction {
+  zoom: {
+    type?: 'crop' | 'lens';       // Visual style (default: crop)
+    level: number;                 // Zoom magnification (1.5 = 150%)
+    target?: 'cursor' | { x: number; y: number };  // What to zoom to (default: cursor)
+    in?: ZoomTransition;           // Zoom-in timing
+    out?: ZoomTransition;          // Zoom-out timing
+    hold?: number | string | 'auto';  // How long to stay zoomed (default: auto = until next action)
+    // Lens-specific options
+    size?: number;                 // Lens diameter in pixels (for type: lens)
+    border?: boolean;              // Show lens border (for type: lens)
+    shadow?: boolean;              // Show lens drop shadow (for type: lens)
+  };
+}
+
+// Zoom reset action
+export interface ZoomResetAction { 'zoom.reset': true | { duration?: number | string; easing?: EasingType } }
 
 // Action types
 export interface CursorShowAction { 'cursor.show': true | {} }
@@ -113,7 +167,9 @@ export type Action =
   | InputTypeAction
   | InputKeysAction
   | VoicePlayAction
-  | VoiceStopAction;
+  | VoiceStopAction
+  | ZoomAction
+  | ZoomResetAction;
 
 export interface SceneFile {
   scene: Scene;

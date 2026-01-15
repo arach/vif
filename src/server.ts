@@ -357,6 +357,14 @@ export class JsonRpcServer {
         return this.handleRecordCommand(id, method, cmd);
       case 'panel':
         return this.handlePanelCommand(id, method, cmd);
+      case 'debug':
+        return this.handleDebugCommand(id, method, cmd);
+      case 'countdown':
+        return this.handleCountdownCommand(id, method, cmd);
+      case 'cue':
+        return this.handleCueCommand(id, method, cmd);
+      case 'zoom':
+        return this.handleZoomCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -645,8 +653,146 @@ export class JsonRpcServer {
         return { id, ok: true };
       }
 
+      case 'targetMode': {
+        const mode = cmd.mode as string ?? 'none';
+        await this.agent!.panelTargetMode(mode);
+        return { id, ok: true };
+      }
+
+      case 'scene': {
+        const name = cmd.name as string | null ?? null;
+        await this.agent!.panelScene(name);
+        return { id, ok: true };
+      }
+
+      case 'action': {
+        const text = cmd.text as string ?? '';
+        await this.agent!.panelAction(text);
+        return { id, ok: true };
+      }
+
+      case 'progress': {
+        const current = cmd.current as number ?? 0;
+        const total = cmd.total as number ?? 0;
+        await this.agent!.panelProgress(current, total);
+        return { id, ok: true };
+      }
+
+      case 'recordingPath': {
+        const path = cmd.path as string ?? '';
+        await this.agent!.panelRecordingPath(path);
+        return { id, ok: true };
+      }
+
       default:
         return { id, ok: false, error: `Unknown panel method: ${method}` };
+    }
+  }
+
+  private async handleDebugCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'show': {
+        const x = cmd.x as number | undefined;
+        const y = cmd.y as number | undefined;
+        const width = cmd.width as number | undefined;
+        await this.agent!.debugShow(x, y, width);
+        return { id, ok: true };
+      }
+
+      case 'hide':
+        await this.agent!.debugHide();
+        return { id, ok: true };
+
+      case 'update': {
+        const data: Record<string, string> = {};
+        if (cmd.actionText) data.actionText = cmd.actionText as string;
+        if (cmd.source) data.source = cmd.source as string;
+        if (cmd.target) data.target = cmd.target as string;
+        if (cmd.screen) data.screen = cmd.screen as string;
+        if (cmd.app) data.app = cmd.app as string;
+        if (cmd.offset) data.offset = cmd.offset as string;
+        if (cmd.sdk) data.sdk = cmd.sdk as string;
+        await this.agent!.debugUpdate(data);
+        return { id, ok: true };
+      }
+
+      case 'clear':
+        await this.agent!.debugClear();
+        return { id, ok: true };
+
+      default:
+        return { id, ok: false, error: `Unknown debug method: ${method}` };
+    }
+  }
+
+  private async handleCountdownCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'start': {
+        const count = cmd.count as number ?? 3;
+        await this.agent!.countdownStart(count);
+        return { id, ok: true };
+      }
+
+      case 'cancel':
+        await this.agent!.countdownCancel();
+        return { id, ok: true };
+
+      default:
+        return { id, ok: false, error: `Unknown countdown method: ${method}` };
+    }
+  }
+
+  private async handleCueCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'play': {
+        const sound = cmd.sound as string;
+        if (!sound) return { id, ok: false, error: 'cue.play requires sound' };
+        const wait = cmd.wait as boolean ?? false;
+        await this.agent!.cuePlay(sound, wait);
+        return { id, ok: true };
+      }
+
+      case 'stop':
+        await this.agent!.cueStop();
+        return { id, ok: true };
+
+      default:
+        return { id, ok: false, error: `Unknown cue method: ${method}` };
+    }
+  }
+
+  private async handleZoomCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'start': {
+        const result = await this.agent!.zoomStart({
+          type: cmd.type as 'crop' | 'lens' | undefined,
+          level: cmd.level as number,
+          target: cmd.target as 'cursor' | { x: number; y: number } | undefined,
+          in: cmd.in as { duration: number; easing: string } | undefined,
+          out: cmd.out as { duration: number; easing: string } | undefined,
+          hold: cmd.hold as number | 'auto' | undefined,
+          size: cmd.size as number | undefined,
+          border: cmd.border as boolean | undefined,
+          shadow: cmd.shadow as boolean | undefined,
+        });
+        return { id, ok: result.ok ?? true, zooming: result.zooming };
+      }
+
+      case 'end': {
+        const result = await this.agent!.zoomEnd({
+          duration: cmd.duration as number | undefined,
+          easing: cmd.easing as string | undefined,
+        });
+        return { id, ok: result.ok ?? true, duration: result.duration };
+      }
+
+      case 'status': {
+        const result = await this.agent!.zoomStatus();
+        return { id, ok: result.ok ?? true, active: result.active, type: result.type, level: result.level };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown zoom method: ${method}` };
     }
   }
 
@@ -697,7 +843,8 @@ export class JsonRpcServer {
 
       case 'backdrop': {
         const show = cmd.show as boolean;
-        await this.agent!.stageBackdrop(show);
+        const type = cmd.type as string | undefined;
+        await this.agent!.stageBackdrop(show, type);
         return { id, ok: true };
       }
 
@@ -706,6 +853,30 @@ export class JsonRpcServer {
         const { action: _a, id: _id, ...params } = cmd;
         await this.agent!.stageRender(params);
         return { id, ok: true };
+      }
+
+      case 'activate': {
+        const app = cmd.app as string;
+        if (!app) return { id, ok: false, error: 'stage.activate requires app name' };
+        await this.agent!.stageActivate(app);
+        return { id, ok: true };
+      }
+
+      case 'setup': {
+        // Full stage setup with choreographed entry - delegate to agent
+        const config = {
+          backdrop: cmd.backdrop as string | undefined,
+          app: cmd.app as { name: string; width?: number; height?: number } | undefined,
+          viewport: cmd.viewport as { padding?: number } | undefined,
+          entry: cmd.entry as { timing?: number } | undefined,
+        };
+        const result = await this.agent!.stageSetup(config);
+        return {
+          id,
+          ok: result.ok as boolean,
+          ready: result.ready as boolean | undefined,
+          bounds: result.bounds as { x: number; y: number; width: number; height: number } | undefined,
+        };
       }
 
       default:

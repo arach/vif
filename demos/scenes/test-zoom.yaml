@@ -1,0 +1,64 @@
+# Test zoom functionality
+scene:
+  name: Zoom Test
+  countdown: false
+
+app:
+  name: Calculator
+  window:
+    width: 300
+    height: 400
+
+stage:
+  backdrop: black
+  viewport:
+    padding: 20
+  entry: 100
+
+sequence:
+  # Setup
+  - cursor.show: true
+  - wait: 500
+
+  # Move cursor to a button and zoom in (crop style)
+  - cursor.moveTo: { x: 150, y: 200, duration: 0.3 }
+  - wait: 300
+
+  # Zoom in with punch effect (fast in, gentle out)
+  - zoom:
+      type: crop
+      level: 1.5
+      target: cursor
+      in:
+        duration: 200
+        easing: ease-out
+      hold: 1000
+      out:
+        duration: 400
+        easing: ease-in-out
+
+  - wait: 500
+
+  # Click while zoomed would be here in a real scene
+  - cursor.click: true
+  - wait: 300
+
+  # Move to another location and zoom again
+  - cursor.moveTo: { x: 200, y: 150, duration: 0.3 }
+  - wait: 200
+
+  # Different zoom style - more dramatic
+  - zoom:
+      type: crop
+      level: 2.0
+      target: cursor
+      in:
+        duration: 300
+        easing: ease-out
+      hold: 800
+      out:
+        duration: 500
+        easing: ease-in-out
+
+  - wait: 500
+  - cursor.hide: true
