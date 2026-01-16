@@ -878,8 +878,7 @@ class BackdropWindow: NSWindow {
         super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .black
-        // Below normal windows so apps appear in front, but above desktop
-        level = NSWindow.Level(rawValue: Int(NSWindow.Level.normal.rawValue) - 1)
+        level = .normal
         ignoresMouseEvents = true
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -1076,7 +1075,8 @@ class BackdropWindow: NSWindow {
     func showBackdrop(color: NSColor = .black) {
         fputs("backdrop: showing (web)\n", stderr)
         backgroundColor = color
-        makeKeyAndOrderFront(nil)
+        alphaValue = 1.0
+        orderFrontRegardless()
     }
 
     func hideBackdrop() {

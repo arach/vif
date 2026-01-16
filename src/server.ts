@@ -736,15 +736,16 @@ export class JsonRpcServer {
   private async handleScenesCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
     switch (method) {
       case 'list': {
-        // List scenes from a directory (default: demos/scenes)
+        // List scenes from a directory (default: demos/scenes in cwd)
         const dir = (cmd.dir as string) || 'demos/scenes';
         const scenesDir = resolve(process.cwd(), dir);
 
         try {
           const scenes = await this.scanScenesDir(scenesDir);
-          return { id, ok: true, scenes };
+          return { id, ok: true, scenes, dir: scenesDir };
         } catch (err) {
-          return { id, ok: false, error: `Failed to list scenes: ${err}` };
+          // Return empty list with the path we tried, so user knows what's wrong
+          return { id, ok: true, scenes: [], error: `No scenes in ${scenesDir}` };
         }
       }
 

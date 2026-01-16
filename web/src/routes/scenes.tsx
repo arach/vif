@@ -16,6 +16,8 @@ interface SceneFile {
 interface ScenesResponse {
   ok: boolean
   scenes: SceneFile[]
+  dir?: string
+  error?: string
 }
 
 interface SceneContentResponse {
@@ -62,6 +64,16 @@ function Scenes() {
           {scenes.length} scene{scenes.length !== 1 ? 's' : ''}
         </span>
       </div>
+
+      {/* Show path being searched */}
+      {scenesData?.dir && (
+        <div className="text-sm text-neutral-500 font-mono bg-neutral-900 rounded px-3 py-2">
+          {scenesData.dir}
+          {scenesData.error && (
+            <span className="text-yellow-500 ml-2">({scenesData.error})</span>
+          )}
+        </div>
+      )}
 
       {!connected ? (
         <div className="text-center py-12 text-neutral-400">
