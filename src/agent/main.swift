@@ -512,6 +512,12 @@ class CursorWindow: NSWindow {
         NSCursor.hide()
         // 4. Push invisible cursor as fallback (in case other methods fail)
         CursorWindow.invisibleCursor.push()
+        // 5. Move system cursor off-screen so screencapture won't capture it
+        //    (screencapture may still capture cursor even when "hidden")
+        if let screen = NSScreen.main {
+            // Move to bottom-left corner (off typical viewport)
+            CGWarpMouseCursorPosition(CGPoint(x: 0, y: screen.frame.height))
+        }
 
         // Now show our synthetic cursor window
         orderFrontRegardless()

@@ -1,0 +1,18 @@
+# Test scene for choreographed entry sequence
+scene:
+  name: Talkie Entry Test
+  mode: draft
+
+import:
+  - ./apps/talkie.yaml
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+  # Choreographed entry: 600ms total (150ms default per layer)
+  # entry: 150  # optional - this is now the default
+
+sequence:
+  - wait: 2s
+  # Watch the entry sequence: Z1 → Z2 → Z4 → Z5

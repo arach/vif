@@ -1,0 +1,28 @@
+# Simple countdown + cues test
+# Solid black backdrop, just the app window
+
+scene:
+  name: Countdown Test
+  mode: draft
+  countdown: 3
+  cues:
+    start: start-cue.mp3
+    end: complete.mp3
+
+import:
+  - ./apps/talkie.yaml
+
+stage:
+  backdrop: true          # Solid black
+  viewport:
+    app: auto
+    padding: 20
+
+sequence:
+  - record: start
+  - cursor.show: {}
+  - wait: 1s
+  - click: sidebar.drafts
+  - wait: 1s
+  - cursor.hide: {}
+  - record: stop

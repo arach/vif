@@ -94,6 +94,64 @@ export interface InputKeysAction { 'input.keys': string[] }
 export interface VoicePlayAction { 'voice.play': { file: string; wait?: boolean } | string }
 export interface VoiceStopAction { 'voice.stop': true | {} }
 
+// ─── Multi-Channel Audio System ──────────────────────────────────────────────
+
+// Audio channel configuration
+export interface AudioChannelConfig {
+  role?: 'music' | 'narration' | 'sfx' | 'ambient' | 'custom';
+  output?: 'virtual-mic' | 'monitor' | 'both' | 'post-only';
+  volume?: number;  // 0.0 - 1.0
+  pan?: number;     // -1.0 (left) to 1.0 (right)
+}
+
+// Audio track configuration (pre-loaded tracks)
+export interface AudioTrackConfig {
+  file: string;
+  channel: number;
+  startTime?: number | string;  // When to start in scene timeline
+  duration?: number | string;   // Override duration (auto-detect if omitted)
+  fadeIn?: number | string;
+  fadeOut?: number | string;
+  loop?: boolean;
+  volume?: number;  // Override channel volume
+}
+
+// Scene-level audio configuration
+export interface AudioConfig {
+  channels?: { [id: number]: AudioChannelConfig };
+  tracks?: AudioTrackConfig[];
+}
+
+// Audio play action
+export interface AudioPlayAction {
+  'audio.play': {
+    file: string;
+    channel?: number;           // Default: 1
+    wait?: boolean;             // Default: true for channel 1, false for others
+    fadeIn?: number | string;
+    fadeOut?: number | string;
+    startAt?: number | string;  // Offset within audio file
+    loop?: boolean;
+  };
+}
+
+// Audio stop action
+export interface AudioStopAction {
+  'audio.stop': {
+    channel?: number;           // Omit to stop all
+    fadeOut?: number | string;
+  } | true;
+}
+
+// Audio volume action
+export interface AudioVolumeAction {
+  'audio.volume': {
+    channel: number;
+    volume: number;
+    duration?: number | string;  // Animate over time
+  };
+}
+
 export type Action =
   | CursorShowAction
   | CursorHideAction
@@ -113,13 +171,17 @@ export type Action =
   | InputTypeAction
   | InputKeysAction
   | VoicePlayAction
-  | VoiceStopAction;
+  | VoiceStopAction
+  | AudioPlayAction
+  | AudioStopAction
+  | AudioVolumeAction;
 
 export interface SceneFile {
   scene: Scene;
   import?: string[];
   app?: App;
   stage?: Stage;
+  audio?: AudioConfig;
   views?: { [name: string]: View };
   labels?: { [name: string]: LabelDef };
   sequence: Action[];
@@ -129,6 +191,7 @@ export interface ParsedScene {
   scene: Scene;
   app?: App;
   stage: Stage;
+  audio?: AudioConfig;
   views: Map<string, View>;
   labels: Map<string, LabelDef>;
   sequence: Action[];
@@ -204,6 +267,7 @@ export class SceneParser {
       scene: data.scene,
       app: appRef.app,
       stage,
+      audio: data.audio,
       views,
       labels,
       sequence: data.sequence,

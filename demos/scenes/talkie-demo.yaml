@@ -36,7 +36,7 @@ sequence:
 
   - navigate:
       through: sidebar
-      items: [home, drafts, all-memos, workflows]
+      items: [home, drafts, memos, workflows]
       wait: 600ms
 
   # Click in content area

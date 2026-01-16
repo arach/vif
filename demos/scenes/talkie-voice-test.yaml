@@ -1,0 +1,21 @@
+# Test scene to verify voice button coordinates in Scratch Pad view
+scene:
+  name: Voice Button Test
+  mode: draft
+
+import:
+  - ./apps/talkie.yaml
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+sequence:
+  - wait: 1s
+  # Navigate to drafts/scratch pad first
+  - click: sidebar.drafts
+  - wait: 1s
+  # Try to click the voice button
+  - click: drafts.voice-btn
+  - wait: 2s

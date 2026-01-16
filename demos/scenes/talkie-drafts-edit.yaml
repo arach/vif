@@ -1,0 +1,84 @@
+# Talkie Drafts Editing Demo
+# Shows the complete workflow: navigate, type, voice edit, accept
+
+scene:
+  name: Talkie Drafts Editing
+  mode: draft
+  countdown: 3              # Show 3-2-1 countdown before recording
+  cues:
+    start: start-cue.mp3    # Gentle beep before recording
+    end: complete.mp3       # Success chime when done
+
+import:
+  - ./apps/talkie.yaml
+
+stage:
+  backdrop: gradient
+  viewport:
+    app: talkie
+    padding: 10
+
+labels:
+  teleprompter:
+    position: top
+    style:
+      background: "rgba(0,0,0,0.9)"
+
+sequence:
+  # Scene intro
+  - label: teleprompter
+    text: "Drafts Editing Demo"
+  - wait: 1s
+
+  - record: start
+  - cursor.show: {}
+
+  # Step 1: Navigate to Drafts
+  - label.update: "Navigate to Drafts"
+  - click: sidebar.drafts
+  - wait: 800ms
+
+  # Step 1.5: Select GPT-4o model (workaround for API bug)
+  - label.update: "Select GPT-4o model"
+  - click: drafts.model-picker
+  - wait: 300ms
+  - click: drafts.model-gpt4o
+  - wait: 500ms
+
+  # Step 2: Click in the text editor
+  - label.update: "Click in the text editor"
+  - click: drafts.text-editor
+  - wait: 500ms
+
+  # Step 3: Type some text
+  - label.update: "Type a message..."
+  - input.type:
+      text: "Hey team, quick update on the project. We're making good progress on the new features."
+      delay: 0.04
+  - wait: 1s
+
+  # Step 4: Use voice command to edit
+  - label.update: "Start voice command"
+  - click: drafts.voice-btn
+  - wait: 500ms
+
+  # Play voice command via BlackHole (ElevenLabs voice)
+  - voice.play: ./audio/edit-request-11labs.mp3
+
+  # Click voice button again to send the command
+  - label.update: "Send voice command"
+  - click: drafts.voice-btn
+  - wait: 2s
+
+  # Step 5: Accept the AI edit (right side button)
+  - label.update: "Accept the AI edit"
+  - click: drafts.accept-btn
+  - wait: 1s
+
+  # Wrap up
+  - label.update: "Edit complete!"
+  - wait: 1s
+
+  - cursor.hide: {}
+  - record: stop
+  - label.hide: {}

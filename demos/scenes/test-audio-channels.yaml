@@ -1,0 +1,86 @@
+# Test scene for multi-channel audio system
+# Tests: channel configuration, audio.play, audio.stop, crossfade
+
+scene:
+  name: Audio Channels Test
+  mode: draft
+  output: audio-test
+
+# Multi-channel audio configuration
+audio:
+  channels:
+    1:
+      role: narration
+      output: virtual-mic   # Real-time through BlackHole
+      volume: 1.0
+    2:
+      role: music
+      output: post-only     # Mixed in post-processing
+      volume: 0.3
+    3:
+      role: sfx
+      output: post-only
+      volume: 0.7
+
+stage:
+  backdrop: gradient
+
+sequence:
+  - cursor.show: {}
+  - wait: 500ms
+
+  - record: start
+
+  # Start background music on channel 2
+  - audio.play:
+      file: audio/background-music.mp3
+      channel: 2
+      fadeIn: 1s
+
+  - wait: 1s
+
+  # Narration on channel 1 (real-time via BlackHole)
+  - audio.play:
+      file: audio/edit-request.mp3
+      channel: 1
+      wait: true
+
+  - wait: 500ms
+
+  # Sound effect on channel 3
+  - audio.play:
+      file: audio/popup.mp3
+      channel: 3
+
+  - wait: 1s
+
+  # Lower music volume during this section
+  - audio.volume:
+      channel: 2
+      volume: 0.15
+      duration: 500ms
+
+  - wait: 2s
+
+  # Applause SFX
+  - audio.play:
+      file: audio/sfx-applause.mp3
+      channel: 3
+
+  # Bring music back up
+  - audio.volume:
+      channel: 2
+      volume: 0.3
+      duration: 500ms
+
+  - wait: 2s
+
+  # Fade out music
+  - audio.stop:
+      channel: 2
+      fadeOut: 2s
+
+  - wait: 1s
+
+  - record: stop
+  - cursor.hide: {}

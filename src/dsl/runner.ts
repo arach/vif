@@ -18,6 +18,7 @@ import {
 } from './parser.js';
 import { resolveTarget, TargetRegistry, queryAppTargets } from './targets.js';
 import { Recorder, RecordingRegion } from '../recorder/index.js';
+import { AudioManager } from '../audio-manager.js';
 
 export interface RunnerOptions {
   port?: number;
@@ -46,6 +47,18 @@ interface VifEvent {
   state?: Record<string, string>;
 }
 
+// Track what we've set up for proper teardown
+interface SetupState {
+  backdrop: boolean;
+  cursor: boolean;
+  viewport: boolean;
+  recording: boolean;
+  recordIndicator: boolean;
+  labels: Set<string>;  // label IDs
+  keys: boolean;
+  typer: boolean;
+}
+
 export class SceneRunner {
   private ws: WebSocket | null = null;
   private msgId = 0;
@@ -61,6 +74,22 @@ export class SceneRunner {
   private recorder: Recorder;
   private viewportRegion: RecordingRegion | undefined;
 
+  // Audio manager for multi-channel audio
+  private audioManager: AudioManager;
+  private currentRecordingPath: string | null = null;
+
+  // Setup state tracking for proper teardown
+  private setupState: SetupState = {
+    backdrop: false,
+    cursor: false,
+    viewport: false,
+    recording: false,
+    recordIndicator: false,
+    labels: new Set(),
+    keys: false,
+    typer: false,
+  };
+
   constructor(scene: ParsedScene, options: RunnerOptions = {}) {
     this.scene = scene;
     this.options = {
@@ -71,6 +100,10 @@ export class SceneRunner {
       ...options,
     };
     this.recorder = new Recorder();
+
+    // Initialize audio manager with scene config
+    this.audioManager = new AudioManager();
+    this.audioManager.configure(scene.audio, scene.basePath);
 
     // Set up recorder event handlers
     this.recorder.on('started', (info) => {
@@ -316,6 +349,9 @@ export class SceneRunner {
 
     await this.connect();
 
+    // Wire up audio manager to send commands via WebSocket
+    this.audioManager.setAgentSender((action, params) => this.send(action, params));
+
     try {
       // Setup stage
       await this.setupStage();
@@ -333,19 +369,25 @@ export class SceneRunner {
       // Print validation summary
       this.printValidationSummary();
     } catch (err) {
-      // Force stop recorder if still running
-      if (this.recorder.isRecording()) {
-        this.log('⚠ Force stopping recorder due to error');
-        this.recorder.forceStop();
+      // On error, run teardown to clean up everything we set up
+      console.log('\n⚠ Error during scene execution, cleaning up...');
+      try {
+        await this.teardown();
+      } catch (teardownErr) {
+        this.log(`⚠ Teardown error: ${teardownErr}`);
+        // Force stop recorder as last resort
+        if (this.recorder.isRecording()) {
+          this.recorder.forceStop();
+        }
       }
       throw err;
     } finally {
-      this.ws?.close();
-
-      // Ensure recorder is stopped
+      // Final safety check - force cleanup anything still running
       if (this.recorder.isRecording()) {
+        this.log('⚠ Force stopping recorder in finally block');
         this.recorder.forceStop();
       }
+      this.ws?.close();
     }
   }
 
@@ -358,6 +400,7 @@ export class SceneRunner {
     // Show backdrop
     if (stage.backdrop) {
       await this.send('stage.backdrop', { show: true });
+      this.setupState.backdrop = true;
     }
 
     // Position and resize app window
@@ -406,6 +449,7 @@ export class SceneRunner {
         this.log(`📐 Viewport: x=${vp.x}, y=${vp.y}, ${vp.width}x${vp.height}`);
         await this.send('viewport.set', vp);
         await this.send('viewport.show');
+        this.setupState.viewport = true;
 
         // Store viewport region for recorder
         this.viewportRegion = vp;
@@ -431,12 +475,14 @@ export class SceneRunner {
     // cursor.show
     if ('cursor.show' in action) {
       await this.send('cursor.show');
+      this.setupState.cursor = true;
       return;
     }
 
     // cursor.hide
     if ('cursor.hide' in action) {
       await this.send('cursor.hide');
+      this.setupState.cursor = false;
       return;
     }
 
@@ -547,20 +593,54 @@ export class SceneRunner {
         } else {
           // Show recording indicator in agent UI
           await this.send('record.indicator', { show: true });
+          this.setupState.recordIndicator = true;
+
+          // Start audio timeline tracking
+          this.audioManager.startRecording();
+          this.currentRecordingPath = output;
+
           await this.recorder.start({
             output,
             region: this.viewportRegion,
             audio: false,
           });
+          this.setupState.recording = true;
         }
       } else {
         if (this.options.dryRun) {
           this.log(`🎬 [dry-run] Would stop recording`);
         } else {
           const outputPath = await this.recorder.stop();
+          this.setupState.recording = false;
           // Hide recording indicator in agent UI
           await this.send('record.indicator', { show: false });
-          console.log(`📼 Recording saved: ${outputPath}`);
+          this.setupState.recordIndicator = false;
+
+          // Check if we have audio to mix
+          const timeline = this.audioManager.getTimeline();
+          const hasPostAudio = timeline.some(e => {
+            const channel = e.channel;
+            // Check if any non-virtual-mic channels have audio
+            return channel !== 1 || this.scene.audio?.channels?.[channel]?.output !== 'virtual-mic';
+          });
+
+          if (hasPostAudio && outputPath) {
+            // Mix audio in post-processing
+            const finalPath = outputPath.replace(/\.(mp4|mov)$/, '-final.$1');
+            this.log(`🎵 Mixing ${timeline.length} audio events...`);
+            const success = this.audioManager.renderFinalMix(outputPath, finalPath);
+            if (success) {
+              console.log(`📼 Recording saved: ${finalPath}`);
+            } else {
+              console.log(`📼 Recording saved (no audio mix): ${outputPath}`);
+            }
+          } else {
+            console.log(`📼 Recording saved: ${outputPath}`);
+          }
+
+          // Reset audio manager for next recording
+          this.audioManager.reset();
+          this.currentRecordingPath = null;
         }
       }
       return;
@@ -589,6 +669,7 @@ export class SceneRunner {
       const text = (action as any).text || labelDef?.text || action.label;
       const position = this.resolveLabelPosition(labelDef?.position);
       await this.send('label.show', { text, ...position });
+      this.setupState.labels.add('default');
       return;
     }
 
@@ -601,6 +682,7 @@ export class SceneRunner {
     // label.hide
     if ('label.hide' in action) {
       await this.send('label.hide');
+      this.setupState.labels.delete('default');
       return;
     }
 
@@ -614,6 +696,7 @@ export class SceneRunner {
     if ('typer.type' in action) {
       const { text, style = 'default', delay = 0.05 } = action['typer.type'];
       await this.send('typer.type', { text, style, delay });
+      this.setupState.typer = true;
       // Wait for typing animation to complete
       const typingDuration = text.length * delay * 1000 + 200;
       await this.sleep(typingDuration);
@@ -623,12 +706,14 @@ export class SceneRunner {
     // typer.hide
     if ('typer.hide' in action) {
       await this.send('typer.hide');
+      this.setupState.typer = false;
       return;
     }
 
     // typer.clear
     if ('typer.clear' in action) {
       await this.send('typer.clear');
+      this.setupState.typer = false;
       return;
     }
 
@@ -651,7 +736,59 @@ export class SceneRunner {
       return;
     }
 
-    // voice.play (audio playback through virtual mic)
+    // ─── Multi-Channel Audio Actions ─────────────────────────────────────────
+
+    // audio.play - play audio on a channel
+    if ('audio.play' in action) {
+      const playAction = action['audio.play'];
+      const channel = playAction.channel ?? 1;
+      const shouldWait = playAction.wait ?? (channel === 1);  // Default wait for channel 1
+
+      this.log(`🎵 Playing audio on channel ${channel}: ${playAction.file}`);
+
+      const duration = await this.audioManager.play({
+        file: playAction.file,
+        channel,
+        wait: shouldWait,
+        fadeIn: playAction.fadeIn ? SceneParser.parseDuration(playAction.fadeIn) : undefined,
+        fadeOut: playAction.fadeOut ? SceneParser.parseDuration(playAction.fadeOut) : undefined,
+        startAt: playAction.startAt ? SceneParser.parseDuration(playAction.startAt) : undefined,
+        loop: playAction.loop,
+      });
+
+      this.log(`🎵 Audio duration: ${duration}ms`);
+      return;
+    }
+
+    // audio.stop - stop audio on a channel
+    if ('audio.stop' in action) {
+      const stopAction = action['audio.stop'];
+      const options = typeof stopAction === 'object' ? stopAction : {};
+
+      this.log(`🎵 Stopping audio${options.channel ? ` on channel ${options.channel}` : ' (all channels)'}`);
+
+      await this.audioManager.stop({
+        channel: options.channel,
+        fadeOut: options.fadeOut ? SceneParser.parseDuration(options.fadeOut) : undefined,
+      });
+      return;
+    }
+
+    // audio.volume - adjust volume on a channel
+    if ('audio.volume' in action) {
+      const volumeAction = action['audio.volume'];
+
+      this.log(`🎵 Setting channel ${volumeAction.channel} volume to ${volumeAction.volume}`);
+
+      await this.audioManager.setVolume({
+        channel: volumeAction.channel,
+        volume: volumeAction.volume,
+        duration: volumeAction.duration ? SceneParser.parseDuration(volumeAction.duration) : undefined,
+      });
+      return;
+    }
+
+    // voice.play (audio playback through virtual mic) - backward compatible
     if ('voice.play' in action) {
       const playAction = action['voice.play'];
       const file = typeof playAction === 'string' ? playAction : playAction.file;
@@ -834,11 +971,95 @@ export class SceneRunner {
   }
 
   /**
-   * Cleanup after scene execution
+   * Cleanup after scene execution - unwind everything we set up
+   */
+  private async teardown(): Promise<void> {
+    this.log('🧹 Teardown: cleaning up...');
+
+    // Stop recording first (most critical)
+    if (this.setupState.recording) {
+      this.log('🧹 Stopping recording...');
+      try {
+        if (this.recorder.isRecording()) {
+          await this.recorder.stop();
+        }
+      } catch (e) {
+        this.log(`⚠ Failed to stop recorder: ${e}`);
+        this.recorder.forceStop();
+      }
+      this.setupState.recording = false;
+    }
+
+    // Hide recording indicator
+    if (this.setupState.recordIndicator) {
+      try {
+        await this.send('record.indicator', { show: false });
+      } catch { /* ignore */ }
+      this.setupState.recordIndicator = false;
+    }
+
+    // Stop any active audio
+    try {
+      await this.audioManager.stop({ fadeOut: 0 });
+    } catch { /* ignore */ }
+    this.audioManager.reset();
+
+    // Hide typer
+    if (this.setupState.typer) {
+      try {
+        await this.send('typer.hide');
+      } catch { /* ignore */ }
+      this.setupState.typer = false;
+    }
+
+    // Hide keys
+    if (this.setupState.keys) {
+      try {
+        await this.send('keys.hide');
+      } catch { /* ignore */ }
+      this.setupState.keys = false;
+    }
+
+    // Hide labels
+    if (this.setupState.labels.size > 0) {
+      try {
+        await this.send('label.hide');
+      } catch { /* ignore */ }
+      this.setupState.labels.clear();
+    }
+
+    // Hide cursor
+    if (this.setupState.cursor) {
+      try {
+        await this.send('cursor.hide');
+      } catch { /* ignore */ }
+      this.setupState.cursor = false;
+    }
+
+    // Hide viewport
+    if (this.setupState.viewport) {
+      try {
+        await this.send('viewport.hide');
+      } catch { /* ignore */ }
+      this.setupState.viewport = false;
+    }
+
+    // Hide backdrop (last)
+    if (this.setupState.backdrop) {
+      try {
+        await this.send('stage.backdrop', { show: false });
+      } catch { /* ignore */ }
+      this.setupState.backdrop = false;
+    }
+
+    this.log('🧹 Teardown complete');
+  }
+
+  /**
+   * Cleanup after scene execution (alias for backward compatibility)
    */
   private async cleanup(): Promise<void> {
-    await this.send('viewport.hide');
-    await this.send('stage.backdrop', { show: false });
+    await this.teardown();
   }
 }
 

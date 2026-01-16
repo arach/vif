@@ -1,0 +1,17 @@
+# Scene to navigate Talkie to Drafts view
+scene:
+  name: Talkie to Drafts
+  mode: draft
+
+import:
+  - ./apps/talkie.yaml
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+sequence:
+  - wait: 1s
+  - click: sidebar.drafts
+  - wait: 2s

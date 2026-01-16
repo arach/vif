@@ -1,0 +1,58 @@
+# Crossfade Demo - Music track transitions
+# Demonstrates smooth transitions between tracks on the same channel
+
+scene:
+  name: Crossfade Demo
+  mode: draft
+  output: crossfade-demo
+
+audio:
+  channels:
+    1:
+      role: music
+      output: post-only
+      volume: 0.5
+
+stage:
+  backdrop: black
+
+sequence:
+  - cursor.show: {}
+  - record: start
+
+  # Start with Track A
+  - audio.play:
+      file: audio/track-a.mp3
+      channel: 1
+      fadeIn: 1s
+      wait: false   # Don't wait for full track, we control timing with waits below
+
+  - wait: 4s
+
+  # Crossfade to Track B (same channel = auto crossfade)
+  - audio.play:
+      file: audio/track-b.mp3
+      channel: 1
+      fadeIn: 2s      # Track A fades out, Track B fades in over 2s
+      wait: false
+
+  - wait: 5s
+
+  # Crossfade to Track C
+  - audio.play:
+      file: audio/track-c.mp3
+      channel: 1
+      fadeIn: 1.5s
+      wait: false
+
+  - wait: 4s
+
+  # Fade out completely
+  - audio.stop:
+      channel: 1
+      fadeOut: 2s
+
+  - wait: 2s
+
+  - record: stop
+  - cursor.hide: {}

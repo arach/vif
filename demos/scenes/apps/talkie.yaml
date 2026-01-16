@@ -4,10 +4,12 @@
 app:
   type: native
   name: Talkie
+  # Use the development build from TalkieSuite DerivedData
+  path: /Users/arach/Library/Developer/Xcode/DerivedData/TalkieSuite-guavpoyqmfbntrgcygyesivttxyh/Build/Products/Debug/Talkie.app
   window:
     width: 1200
     height: 800
-    center: true
+    center: true  # Center window to ensure HUD is visible
 
 views:
   # Sidebar items (order: Home, Memos, Dictations, Drafts, then sections)
@@ -35,12 +37,19 @@ views:
       top: { x: 50%, y: 100 }
 
   # Drafts/ScratchPad view targets
+  # Targets with .demoAnchor() in SwiftUI are SDK-provided (real coordinates)
+  # Others are fallback coordinates used when SDK unavailable
   drafts:
     region: { x: 200, width: stretch }
     items:
-      - text-editor: { x: 400, y: 280 }       # Main text editor area
+      # SDK-provided via DemoKit .demoAnchor() modifiers:
+      - text-editor: { x: 400, y: 280 }       # drafts.text-editor (SDK)
+      - voice-btn: { x: 65, y: 408 }          # drafts.voice-btn (SDK)
+      - accept-btn: { x: 720, y: 408 }        # drafts.accept-btn (SDK)
+      - reject-btn: { x: 720, y: 380 }        # drafts.reject-btn (SDK)
+      - model-picker: { x: 50, y: 50 }        # drafts.model-picker (SDK)
+      # Fallback-only (no SDK anchor yet):
       - dictation-pill: { x: 500, y: 430 }    # Floating dictation button
-      - voice-btn: { x: 65, y: 545 }          # Voice command button (action bar)
       - copy-btn: { x: 720, y: 545 }          # Copy to clipboard button
-      - model-picker: { x: 250, y: 150 }      # Model selector dropdown
+      - model-gpt4o: { x: 50, y: 100 }        # GPT-4o option in dropdown
       - clear-btn: { x: 720, y: 150 }         # Clear text button
