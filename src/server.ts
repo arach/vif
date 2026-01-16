@@ -333,7 +333,20 @@ export class JsonRpcServer {
             clients: this.clients.size,
             scene: this.runningScene,
             uptime: Date.now() - this.startTime,
+            cwd: process.cwd(),
           };
+        }
+
+        case 'restart': {
+          this.log('🔄 Restart requested, exiting...');
+          setTimeout(() => process.exit(0), 100);
+          return { id, ok: true, message: 'Server exiting - restart manually or use a process manager' };
+        }
+
+        case 'quit': {
+          this.log('👋 Quit requested');
+          setTimeout(() => process.exit(0), 100);
+          return { id, ok: true, message: 'Server shutting down' };
         }
 
         default:

@@ -13,6 +13,7 @@ interface ServerStatus {
   clients: number
   scene: { name: string; startTime: number } | null
   uptime: number
+  cwd: string
 }
 
 function Dashboard() {
@@ -65,6 +66,37 @@ function Dashboard() {
           status="neutral"
         />
       </div>
+
+      {/* Server Info */}
+      {status?.cwd && (
+        <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-4 py-3">
+          <div className="text-sm font-mono text-neutral-400 truncate flex-1">
+            {status.cwd}
+          </div>
+          <div className="flex gap-2 ml-4">
+            <button
+              onClick={() => {
+                if (confirm('Restart the vif server?')) {
+                  vifClient.send('restart')
+                }
+              }}
+              className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded text-sm hover:bg-yellow-500/30"
+            >
+              Restart
+            </button>
+            <button
+              onClick={() => {
+                if (confirm('Quit the vif server?')) {
+                  vifClient.send('quit')
+                }
+              }}
+              className="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-sm hover:bg-red-500/30"
+            >
+              Quit
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Running Scene */}
       {status?.scene && (
