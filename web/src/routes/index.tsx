@@ -40,147 +40,169 @@ function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold gradient-text">Dashboard</h1>
+        <p className="text-neutral-500 mt-1">Monitor and control your vif automation server</p>
+      </div>
 
       {/* Status Cards */}
       <div className="grid grid-cols-4 gap-4">
         <StatusCard
           label="Connection"
-          value={connected ? 'Connected' : 'Offline'}
+          value={connected ? 'Online' : 'Offline'}
           status={connected ? 'success' : 'error'}
+          icon="●"
         />
         <StatusCard
           label="Agent"
-          value={status?.agent ? 'Running' : 'Stopped'}
+          value={status?.agent ? 'Active' : 'Inactive'}
           status={status?.agent ? 'success' : 'neutral'}
+          icon="◆"
         />
         <StatusCard
           label="Scene"
           value={status?.scene ? 'Running' : 'Idle'}
           status={status?.scene ? 'warning' : 'neutral'}
+          icon="▶"
         />
         <StatusCard
           label="Uptime"
-          value={status ? formatUptime(status.uptime) : '-'}
+          value={status ? formatUptime(status.uptime) : '—'}
           status="neutral"
+          icon="◷"
         />
       </div>
 
-      {/* Server Info */}
-      {status?.cwd && (
-        <div className="flex items-center justify-between bg-neutral-900 rounded-lg px-4 py-3">
-          <div className="text-sm font-mono text-neutral-400 truncate flex-1">
-            {status.cwd}
-          </div>
-          <div className="flex gap-2 ml-4">
-            <button
-              onClick={() => {
-                if (confirm('Restart the vif server?')) {
-                  vifClient.send('restart')
-                }
-              }}
-              className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded text-sm hover:bg-yellow-500/30"
-            >
-              Restart
-            </button>
-            <button
-              onClick={() => {
-                if (confirm('Quit the vif server?')) {
-                  vifClient.send('quit')
-                }
-              }}
-              className="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-sm hover:bg-red-500/30"
-            >
-              Quit
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Running Scene */}
-      {status?.scene && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-medium">Running Scene</h2>
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-            <div className="flex items-center justify-between">
+      {/* Server Control Bar */}
+      {connected && (
+        <div className="glass-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-vif-accent/20 to-purple-500/20 flex items-center justify-center border border-white/10">
+                <span className="text-vif-accent">⚡</span>
+              </div>
               <div>
-                <p className="font-medium text-yellow-400">{status.scene.name}</p>
-                <p className="text-sm text-neutral-400">
-                  Started {formatUptime(Date.now() - status.scene.startTime)} ago
+                <p className="text-sm font-medium text-white">Server Control</p>
+                <p className="text-xs font-mono text-neutral-500 truncate max-w-md">
+                  {status?.cwd || 'Loading...'}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-                <span className="text-sm text-yellow-400">Recording</span>
-              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (confirm('Restart the vif server?')) {
+                    vifClient.send('restart')
+                  }
+                }}
+                className="glow-button px-4 py-2 bg-vif-warning/10 text-vif-warning border border-vif-warning/20 rounded-lg text-sm font-medium hover:bg-vif-warning/20 transition-all"
+              >
+                ↻ Restart
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('Quit the vif server?')) {
+                    vifClient.send('quit')
+                  }
+                }}
+                className="px-4 py-2 bg-vif-danger/10 text-vif-danger border border-vif-danger/20 rounded-lg text-sm font-medium hover:bg-vif-danger/20 transition-all"
+              >
+                ⏻ Quit
+              </button>
             </div>
           </div>
-        </section>
+        </div>
       )}
 
-      {/* Quick Actions */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Stage Controls</h2>
-        <div className="flex flex-wrap gap-3">
-          <ActionButton onClick={() => vifClient.send('cursor.show', {})}>
-            Show Cursor
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('cursor.hide', {})}>
-            Hide Cursor
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('backdrop.show', {})}>
-            Show Backdrop
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('backdrop.hide', {})}>
-            Hide Backdrop
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('stage.clear', {})}>
-            Clear Stage
-          </ActionButton>
+      {/* Running Scene Banner */}
+      {status?.scene && (
+        <div className="glass-card p-4 border-vif-warning/30 bg-gradient-to-r from-vif-warning/5 to-transparent">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-vif-warning/20 flex items-center justify-center">
+                <span className="text-vif-warning animate-pulse">▶</span>
+              </div>
+              <div>
+                <p className="font-medium text-vif-warning">Scene Running</p>
+                <p className="text-sm text-neutral-400">{status.scene.name}</p>
+              </div>
+            </div>
+            <div className="text-sm text-neutral-400">
+              {formatUptime(Date.now() - status.scene.startTime)} elapsed
+            </div>
+          </div>
         </div>
-      </section>
+      )}
 
-      {/* Label Controls */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Labels</h2>
-        <div className="flex flex-wrap gap-3">
-          <ActionButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'top' })}>
-            Show Label (Top)
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'bottom' })}>
-            Show Label (Bottom)
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('label.hide', {})}>
-            Hide Label
-          </ActionButton>
+      {/* Control Sections */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Stage Controls */}
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-vif-accent">◐</span>
+            <h2 className="font-semibold">Stage Controls</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ControlButton onClick={() => vifClient.send('cursor.show', {})} icon="↖" label="Show Cursor" />
+            <ControlButton onClick={() => vifClient.send('cursor.hide', {})} icon="↗" label="Hide Cursor" />
+            <ControlButton onClick={() => vifClient.send('backdrop.show', {})} icon="▣" label="Show Backdrop" />
+            <ControlButton onClick={() => vifClient.send('backdrop.hide', {})} icon="▢" label="Hide Backdrop" />
+            <ControlButton onClick={() => vifClient.send('stage.clear', {})} icon="✕" label="Clear Stage" variant="danger" />
+          </div>
         </div>
-      </section>
 
-      {/* Recording Controls */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Recording</h2>
-        <div className="flex flex-wrap gap-3">
-          <ActionButton
-            onClick={() => vifClient.send('record.start', { mode: 'draft' })}
-            variant="primary"
-          >
-            Start Recording (Draft)
-          </ActionButton>
-          <ActionButton
-            onClick={() => vifClient.send('record.stop', {})}
-            variant="danger"
-          >
-            Stop Recording
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('record.indicator', { show: true })}>
-            Show Indicator
-          </ActionButton>
-          <ActionButton onClick={() => vifClient.send('record.indicator', { show: false })}>
-            Hide Indicator
-          </ActionButton>
+        {/* Recording Controls */}
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-vif-danger">●</span>
+            <h2 className="font-semibold">Recording</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ControlButton
+              onClick={() => vifClient.send('record.start', { mode: 'draft' })}
+              icon="●"
+              label="Start Draft"
+              variant="primary"
+            />
+            <ControlButton
+              onClick={() => vifClient.send('record.stop', {})}
+              icon="■"
+              label="Stop"
+              variant="danger"
+            />
+            <ControlButton onClick={() => vifClient.send('record.indicator', { show: true })} icon="◉" label="Show Indicator" />
+            <ControlButton onClick={() => vifClient.send('record.indicator', { show: false })} icon="○" label="Hide Indicator" />
+          </div>
         </div>
-      </section>
+
+        {/* Label Controls */}
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-purple-400">◈</span>
+            <h2 className="font-semibold">Labels</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ControlButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'top' })} icon="▲" label="Label Top" />
+            <ControlButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'bottom' })} icon="▼" label="Label Bottom" />
+            <ControlButton onClick={() => vifClient.send('label.hide', {})} icon="✕" label="Hide Label" />
+          </div>
+        </div>
+
+        {/* Keys Controls */}
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-cyan-400">⌨</span>
+            <h2 className="font-semibold">Keys Overlay</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ControlButton onClick={() => vifClient.send('keys.show', { keys: ['cmd', 'shift', 'p'] })} icon="⌘" label="Cmd+Shift+P" />
+            <ControlButton onClick={() => vifClient.send('keys.show', { keys: ['cmd', 's'] })} icon="⌘" label="Cmd+S" />
+            <ControlButton onClick={() => vifClient.send('keys.hide', {})} icon="✕" label="Hide Keys" />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -189,47 +211,62 @@ function StatusCard({
   label,
   value,
   status,
+  icon,
 }: {
   label: string
   value: string
   status: 'success' | 'error' | 'warning' | 'neutral'
+  icon: string
 }) {
   const statusColors = {
-    success: 'text-green-400',
-    error: 'text-red-400',
-    warning: 'text-yellow-400',
+    success: 'text-vif-success',
+    error: 'text-vif-danger',
+    warning: 'text-vif-warning',
     neutral: 'text-neutral-400',
   }
 
+  const bgColors = {
+    success: 'from-vif-success/10',
+    error: 'from-vif-danger/10',
+    warning: 'from-vif-warning/10',
+    neutral: 'from-neutral-500/10',
+  }
+
   return (
-    <div className="bg-vif-surface border border-vif-border rounded-lg p-4">
-      <p className="text-sm text-neutral-400">{label}</p>
-      <p className={`text-xl font-medium ${statusColors[status]}`}>{value}</p>
+    <div className={`glass-card p-4 bg-gradient-to-br ${bgColors[status]} to-transparent`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-lg ${statusColors[status]}`}>{icon}</span>
+      </div>
+      <p className={`text-2xl font-semibold ${statusColors[status]}`}>{value}</p>
+      <p className="text-sm text-neutral-500 mt-1">{label}</p>
     </div>
   )
 }
 
-function ActionButton({
+function ControlButton({
   onClick,
-  children,
+  icon,
+  label,
   variant = 'default',
 }: {
   onClick: () => void
-  children: React.ReactNode
+  icon: string
+  label: string
   variant?: 'default' | 'primary' | 'danger'
 }) {
   const variants = {
-    default: 'bg-vif-surface border-vif-border hover:bg-neutral-800',
-    primary: 'bg-vif-accent border-vif-accent hover:bg-blue-600',
-    danger: 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30',
+    default: 'bg-white/[0.03] border-white/10 hover:bg-white/[0.08] hover:border-white/20',
+    primary: 'bg-vif-accent/10 border-vif-accent/30 text-vif-accent hover:bg-vif-accent/20',
+    danger: 'bg-vif-danger/10 border-vif-danger/30 text-vif-danger hover:bg-vif-danger/20',
   }
 
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 border rounded-lg text-sm transition-colors ${variants[variant]}`}
+      className={`flex items-center gap-2 px-3 py-2.5 border rounded-lg text-sm transition-all ${variants[variant]}`}
     >
-      {children}
+      <span className="opacity-60">{icon}</span>
+      <span>{label}</span>
     </button>
   )
 }

@@ -49,7 +49,6 @@ function Scenes() {
   const runSceneMutation = useMutation({
     mutationFn: (path: string) => vifClient.send('scenes.run', { path: `demos/scenes/${path}` }),
     onSuccess: () => {
-      // Refetch status to show running scene
       queryClient.invalidateQueries({ queryKey: ['server-status'] })
     },
   })
@@ -57,73 +56,91 @@ function Scenes() {
   const scenes = scenesData?.scenes || []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Scenes</h1>
-        <span className="text-sm text-neutral-400">
-          {scenes.length} scene{scenes.length !== 1 ? 's' : ''}
-        </span>
+        <div>
+          <h1 className="text-3xl font-bold gradient-text">Scenes</h1>
+          <p className="text-neutral-500 mt-1">Browse and run your automation scenes</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-neutral-500">
+            {scenes.length} scene{scenes.length !== 1 ? 's' : ''}
+          </span>
+          <button className="glow-button px-4 py-2 bg-vif-accent text-white rounded-lg text-sm font-medium hover:shadow-glow transition-all">
+            + New Scene
+          </button>
+        </div>
       </div>
 
-      {/* Show path being searched */}
+      {/* Path indicator */}
       {scenesData?.dir && (
-        <div className="text-sm text-neutral-500 font-mono bg-neutral-900 rounded px-3 py-2">
-          {scenesData.dir}
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-neutral-500">📁</span>
+          <code className="font-mono text-neutral-400 bg-white/5 px-2 py-1 rounded">
+            {scenesData.dir}
+          </code>
           {scenesData.error && (
-            <span className="text-yellow-500 ml-2">({scenesData.error})</span>
+            <span className="text-vif-warning">⚠ {scenesData.error}</span>
           )}
         </div>
       )}
 
       {!connected ? (
-        <div className="text-center py-12 text-neutral-400">
-          <p>Connect to vif agent to view scenes</p>
+        <div className="glass-card p-12 text-center">
+          <div className="text-4xl mb-4 opacity-50">📡</div>
+          <p className="text-neutral-400">Connect to vif agent to view scenes</p>
         </div>
       ) : isLoading ? (
-        <div className="text-neutral-400">Loading scenes...</div>
+        <div className="glass-card p-12 text-center">
+          <div className="text-4xl mb-4 animate-pulse">⏳</div>
+          <p className="text-neutral-400">Loading scenes...</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-5 gap-6">
           {/* Scene List */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide">
-              Available Scenes
-            </h2>
-            <div className="space-y-2">
-              {scenes.map((scene) => (
-                <SceneCard
-                  key={scene.path}
-                  scene={scene}
-                  selected={selectedPath === scene.path}
-                  onSelect={() => setSelectedPath(scene.path)}
-                  onRun={() => runSceneMutation.mutate(scene.path)}
-                  isRunning={runSceneMutation.isPending}
-                />
-              ))}
-            </div>
+          <div className="col-span-2 space-y-3">
+            {scenes.map((scene) => (
+              <SceneCard
+                key={scene.path}
+                scene={scene}
+                selected={selectedPath === scene.path}
+                onSelect={() => setSelectedPath(scene.path)}
+                onRun={() => runSceneMutation.mutate(scene.path)}
+                isRunning={runSceneMutation.isPending}
+              />
+            ))}
             {scenes.length === 0 && (
-              <div className="text-center py-8 text-neutral-500">
-                <p>No scenes found in demos/scenes/</p>
+              <div className="glass-card p-8 text-center">
+                <div className="text-3xl mb-3 opacity-50">🎬</div>
+                <p className="text-neutral-500">No scenes found</p>
+                <p className="text-sm text-neutral-600 mt-1">Create a scene to get started</p>
               </div>
             )}
           </div>
 
           {/* Scene Preview */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide">
-              Preview
-            </h2>
+          <div className="col-span-3">
             {selectedPath ? (
-              <div className="bg-vif-surface border border-vif-border rounded-lg overflow-hidden">
-                <div className="px-4 py-2 border-b border-vif-border bg-neutral-900/50">
-                  <span className="text-sm font-mono text-neutral-300">{selectedPath}</span>
+              <div className="glass-card overflow-hidden sticky top-8">
+                <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
+                  <code className="text-sm font-mono text-neutral-300">{selectedPath}</code>
+                  <button
+                    onClick={() => runSceneMutation.mutate(selectedPath)}
+                    disabled={runSceneMutation.isPending}
+                    className="px-3 py-1.5 bg-vif-accent text-white rounded text-sm font-medium hover:bg-vif-accent-bright transition-colors disabled:opacity-50"
+                  >
+                    ▶ Run
+                  </button>
                 </div>
-                <pre className="p-4 text-sm font-mono text-neutral-300 overflow-auto max-h-[600px]">
+                <pre className="p-4 text-sm font-mono text-neutral-300 overflow-auto max-h-[70vh] leading-relaxed">
                   {sceneContent?.content || 'Loading...'}
                 </pre>
               </div>
             ) : (
-              <div className="bg-vif-surface border border-vif-border rounded-lg p-8 text-center text-neutral-500">
-                Select a scene to preview
+              <div className="glass-card p-12 text-center sticky top-8">
+                <div className="text-4xl mb-4 opacity-30">👈</div>
+                <p className="text-neutral-500">Select a scene to preview</p>
               </div>
             )}
           </div>
@@ -153,14 +170,20 @@ function SceneCard({
     <div
       onClick={onSelect}
       className={`
-        bg-vif-surface border rounded-lg p-4 cursor-pointer transition-all
-        ${selected ? 'border-vif-accent ring-1 ring-vif-accent/50' : 'border-vif-border hover:border-neutral-600'}
+        glass-card p-4 cursor-pointer transition-all duration-200
+        ${selected
+          ? 'border-vif-accent/50 shadow-glow-sm bg-gradient-to-br from-vif-accent/10 to-transparent'
+          : 'hover:border-white/20 hover:bg-white/[0.02]'
+        }
       `}
     >
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium truncate">{scene.name}</h3>
-          <p className="text-sm text-neutral-500">{timeAgo}</p>
+          <h3 className="font-medium truncate flex items-center gap-2">
+            <span className="text-vif-accent opacity-60">▶</span>
+            {scene.name.replace('.yaml', '')}
+          </h3>
+          <p className="text-sm text-neutral-500 mt-1">{timeAgo}</p>
         </div>
         <button
           onClick={(e) => {
@@ -169,14 +192,14 @@ function SceneCard({
           }}
           disabled={isRunning}
           className={`
-            ml-3 px-3 py-1.5 rounded text-sm font-medium transition-colors
+            ml-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
             ${isRunning
               ? 'bg-neutral-700 text-neutral-400 cursor-not-allowed'
-              : 'bg-vif-accent text-white hover:bg-blue-600'
+              : 'bg-vif-accent/20 text-vif-accent border border-vif-accent/30 hover:bg-vif-accent/30'
             }
           `}
         >
-          {isRunning ? 'Starting...' : 'Run'}
+          {isRunning ? '...' : 'Run'}
         </button>
       </div>
     </div>

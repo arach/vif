@@ -2,6 +2,102 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+@layer base {
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: #09090b;
+  }
+
+  /* Nice scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
+}
+
+@layer components {
+  /* Glass morphism card */
+  .glass-card {
+    @apply bg-gradient-to-b from-white/[0.08] to-white/[0.02]
+           backdrop-blur-xl
+           border border-white/[0.08]
+           rounded-xl
+           shadow-inner-glow;
+  }
+
+  /* Subtle glow button */
+  .glow-button {
+    @apply relative overflow-hidden transition-all duration-300;
+  }
+
+  .glow-button::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-r from-vif-accent/20 to-purple-500/20
+           opacity-0 transition-opacity duration-300;
+  }
+
+  .glow-button:hover::before {
+    @apply opacity-100;
+  }
+
+  .glow-button:hover {
+    @apply shadow-glow-sm;
+  }
+
+  /* Status dot with glow */
+  .status-dot {
+    @apply relative;
+  }
+
+  .status-dot::after {
+    content: '';
+    @apply absolute inset-0 rounded-full animate-ping opacity-75;
+  }
+
+  .status-dot-success::after {
+    @apply bg-vif-success;
+  }
+
+  .status-dot-warning::after {
+    @apply bg-vif-warning;
+  }
+
+  .status-dot-danger::after {
+    @apply bg-vif-danger;
+  }
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-neutral-400;
+}
+
+/* Noise overlay for texture */
+.noise-overlay {
+  position: relative;
+}
+
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  border-radius: inherit;
 }
