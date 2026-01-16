@@ -1,46 +1,96 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { vifClient } from '@/lib/vif-client'
+import { useEffect, useState } from 'react'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
 })
 
+interface ServerStatus {
+  ok: boolean
+  agent: boolean
+  clients: number
+  scene: { name: string; startTime: number } | null
+  uptime: number
+}
+
 function Dashboard() {
-  const { data: status, isLoading } = useQuery({
-    queryKey: ['agent-status'],
-    queryFn: () => vifClient.send<AgentStatus>('status'),
-    refetchInterval: 2000,
-    enabled: vifClient.connected,
+  const [connected, setConnected] = useState(vifClient.connected)
+
+  useEffect(() => {
+    return vifClient.onConnection(setConnected)
+  }, [])
+
+  const { data: status } = useQuery({
+    queryKey: ['server-status'],
+    queryFn: () => vifClient.send<ServerStatus>('status'),
+    refetchInterval: 1000,
+    enabled: connected,
   })
+
+  const formatUptime = (ms: number) => {
+    const seconds = Math.floor(ms / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    if (hours > 0) return `${hours}h ${minutes % 60}m`
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`
+    return `${seconds}s`
+  }
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
       {/* Status Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
+        <StatusCard
+          label="Connection"
+          value={connected ? 'Connected' : 'Offline'}
+          status={connected ? 'success' : 'error'}
+        />
         <StatusCard
           label="Agent"
-          value={vifClient.connected ? 'Running' : 'Offline'}
-          status={vifClient.connected ? 'success' : 'error'}
+          value={status?.agent ? 'Running' : 'Stopped'}
+          status={status?.agent ? 'success' : 'neutral'}
         />
         <StatusCard
-          label="Recording"
-          value={status?.recording ? 'Active' : 'Idle'}
-          status={status?.recording ? 'warning' : 'neutral'}
+          label="Scene"
+          value={status?.scene ? 'Running' : 'Idle'}
+          status={status?.scene ? 'warning' : 'neutral'}
         />
         <StatusCard
-          label="Port"
-          value="51378"
+          label="Uptime"
+          value={status ? formatUptime(status.uptime) : '-'}
           status="neutral"
         />
       </div>
 
+      {/* Running Scene */}
+      {status?.scene && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-medium">Running Scene</h2>
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-yellow-400">{status.scene.name}</p>
+                <p className="text-sm text-neutral-400">
+                  Started {formatUptime(Date.now() - status.scene.startTime)} ago
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                <span className="text-sm text-yellow-400">Recording</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Quick Actions */}
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Quick Actions</h2>
-        <div className="flex gap-3">
+        <h2 className="text-lg font-medium">Stage Controls</h2>
+        <div className="flex flex-wrap gap-3">
           <ActionButton onClick={() => vifClient.send('cursor.show', {})}>
             Show Cursor
           </ActionButton>
@@ -59,30 +109,48 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* Recent Activity */}
+      {/* Label Controls */}
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Agent Info</h2>
-        <div className="bg-vif-surface border border-vif-border rounded-lg p-4">
-          {isLoading ? (
-            <p className="text-neutral-400">Loading...</p>
-          ) : status ? (
-            <pre className="text-sm text-neutral-300 font-mono">
-              {JSON.stringify(status, null, 2)}
-            </pre>
-          ) : (
-            <p className="text-neutral-400">
-              Connect to vif agent to see status
-            </p>
-          )}
+        <h2 className="text-lg font-medium">Labels</h2>
+        <div className="flex flex-wrap gap-3">
+          <ActionButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'top' })}>
+            Show Label (Top)
+          </ActionButton>
+          <ActionButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'bottom' })}>
+            Show Label (Bottom)
+          </ActionButton>
+          <ActionButton onClick={() => vifClient.send('label.hide', {})}>
+            Hide Label
+          </ActionButton>
+        </div>
+      </section>
+
+      {/* Recording Controls */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">Recording</h2>
+        <div className="flex flex-wrap gap-3">
+          <ActionButton
+            onClick={() => vifClient.send('record.start', { mode: 'draft' })}
+            variant="primary"
+          >
+            Start Recording (Draft)
+          </ActionButton>
+          <ActionButton
+            onClick={() => vifClient.send('record.stop', {})}
+            variant="danger"
+          >
+            Stop Recording
+          </ActionButton>
+          <ActionButton onClick={() => vifClient.send('record.indicator', { show: true })}>
+            Show Indicator
+          </ActionButton>
+          <ActionButton onClick={() => vifClient.send('record.indicator', { show: false })}>
+            Hide Indicator
+          </ActionButton>
         </div>
       </section>
     </div>
   )
-}
-
-interface AgentStatus {
-  recording: boolean
-  [key: string]: unknown
 }
 
 function StatusCard({
@@ -112,14 +180,22 @@ function StatusCard({
 function ActionButton({
   onClick,
   children,
+  variant = 'default',
 }: {
   onClick: () => void
   children: React.ReactNode
+  variant?: 'default' | 'primary' | 'danger'
 }) {
+  const variants = {
+    default: 'bg-vif-surface border-vif-border hover:bg-neutral-800',
+    primary: 'bg-vif-accent border-vif-accent hover:bg-blue-600',
+    danger: 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30',
+  }
+
   return (
     <button
       onClick={onClick}
-      className="px-4 py-2 bg-vif-surface border border-vif-border rounded-lg text-sm hover:bg-neutral-800 transition-colors"
+      className={`px-4 py-2 border rounded-lg text-sm transition-colors ${variants[variant]}`}
     >
       {children}
     </button>

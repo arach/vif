@@ -59,7 +59,10 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
+import { readdir, readFile, stat } from 'fs/promises';
+import { join, resolve, extname } from 'path';
 import { VifAgent } from './agent-client.js';
+import { runScene } from './dsl/index.js';
 
 // ============================================================================
 // Types
@@ -98,6 +101,7 @@ export class JsonRpcServer {
   private clients: Set<WebSocket> = new Set();
   private options: Required<ServerOptions>;
   private agent: VifAgent | null = null;
+  private startTime: number = Date.now();
 
   constructor(options: ServerOptions = {}) {
     this.options = {
@@ -321,6 +325,17 @@ export class JsonRpcServer {
           return { id, ok: true, pong: Date.now() };
         }
 
+        case 'status': {
+          return {
+            id,
+            ok: true,
+            agent: this.agent !== null,
+            clients: this.clients.size,
+            scene: this.runningScene,
+            uptime: Date.now() - this.startTime,
+          };
+        }
+
         default:
           return { id, ok: false, error: `Unknown action: ${action}` };
       }
@@ -357,6 +372,8 @@ export class JsonRpcServer {
         return this.handleRecordCommand(id, method, cmd);
       case 'panel':
         return this.handlePanelCommand(id, method, cmd);
+      case 'scenes':
+        return this.handleScenesCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -711,6 +728,107 @@ export class JsonRpcServer {
       default:
         return { id, ok: false, error: `Unknown stage method: ${method}` };
     }
+  }
+
+  // Track running scene
+  private runningScene: { name: string; startTime: number } | null = null;
+
+  private async handleScenesCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'list': {
+        // List scenes from a directory (default: demos/scenes)
+        const dir = (cmd.dir as string) || 'demos/scenes';
+        const scenesDir = resolve(process.cwd(), dir);
+
+        try {
+          const scenes = await this.scanScenesDir(scenesDir);
+          return { id, ok: true, scenes };
+        } catch (err) {
+          return { id, ok: false, error: `Failed to list scenes: ${err}` };
+        }
+      }
+
+      case 'read': {
+        // Read a scene file
+        const path = cmd.path as string;
+        if (!path) return { id, ok: false, error: 'scenes.read requires path' };
+
+        try {
+          const fullPath = resolve(process.cwd(), path);
+          const content = await readFile(fullPath, 'utf-8');
+          return { id, ok: true, content };
+        } catch (err) {
+          return { id, ok: false, error: `Failed to read scene: ${err}` };
+        }
+      }
+
+      case 'run': {
+        // Run a scene file
+        const path = cmd.path as string;
+        if (!path) return { id, ok: false, error: 'scenes.run requires path' };
+
+        if (this.runningScene) {
+          return { id, ok: false, error: `Scene already running: ${this.runningScene.name}` };
+        }
+
+        const fullPath = resolve(process.cwd(), path);
+        this.runningScene = { name: path, startTime: Date.now() };
+        this.log(`▶ Running scene: ${path}`);
+
+        // Run scene in background, don't await
+        runScene(fullPath, { port: this.options.port })
+          .then(() => {
+            this.log(`✓ Scene completed: ${path}`);
+            this.runningScene = null;
+          })
+          .catch((err) => {
+            this.log(`✗ Scene failed: ${err.message}`);
+            this.runningScene = null;
+          });
+
+        return { id, ok: true, message: `Started scene: ${path}` };
+      }
+
+      case 'status': {
+        return {
+          id,
+          ok: true,
+          running: this.runningScene !== null,
+          scene: this.runningScene,
+        };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown scenes method: ${method}` };
+    }
+  }
+
+  private async scanScenesDir(dir: string): Promise<Array<{ name: string; path: string; modified: string }>> {
+    const scenes: Array<{ name: string; path: string; modified: string }> = [];
+
+    const scanDir = async (currentDir: string, prefix = '') => {
+      const entries = await readdir(currentDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = join(currentDir, entry.name);
+        const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+        if (entry.isDirectory()) {
+          // Recurse into subdirectories
+          await scanDir(fullPath, relativePath);
+        } else if (extname(entry.name) === '.yaml' || extname(entry.name) === '.yml') {
+          const stats = await stat(fullPath);
+          scenes.push({
+            name: entry.name,
+            path: relativePath,
+            modified: stats.mtime.toISOString(),
+          });
+        }
+      }
+    };
+
+    await scanDir(dir);
+    return scenes.sort((a, b) => b.modified.localeCompare(a.modified));
   }
 
   private send(ws: WebSocket, data: Response | ServerEvent): void {

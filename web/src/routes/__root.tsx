@@ -32,7 +32,7 @@ function RootLayout() {
             <nav className="flex gap-4">
               <NavLink to="/">Dashboard</NavLink>
               <NavLink to="/scenes">Scenes</NavLink>
-              <NavLink to="/recordings">Recordings</NavLink>
+              <NavLink to="/recordings">Post-Production</NavLink>
             </nav>
           </div>
           <div className="flex items-center gap-2">

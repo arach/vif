@@ -30,7 +30,7 @@ export class VifClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private shouldReconnect = true
 
-  constructor(url = 'ws://localhost:51378') {
+  constructor(url = 'ws://localhost:7850') {
     this.url = url
   }
 
