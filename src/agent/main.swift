@@ -878,7 +878,8 @@ class BackdropWindow: NSWindow {
         super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .black
-        level = .normal
+        // Below normal windows so apps appear in front, but above desktop
+        level = NSWindow.Level(rawValue: Int(NSWindow.Level.normal.rawValue) - 1)
         ignoresMouseEvents = true
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
