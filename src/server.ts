@@ -217,13 +217,21 @@ export class JsonRpcServer {
 
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
 
-    // Only serve videos from /videos/ path
-    if (!url.pathname.startsWith('/videos/')) {
+    // Route to appropriate handler
+    if (url.pathname.startsWith('/videos/')) {
+      this.handleVideoRequest(req, res, url);
+    } else if (url.pathname.startsWith('/sfx/')) {
+      this.handleSfxRequest(req, res, url);
+    } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
-      return;
     }
+  }
 
+  /**
+   * Handle video file requests
+   */
+  private handleVideoRequest(req: IncomingMessage, res: ServerResponse, url: URL): void {
     const videoName = decodeURIComponent(url.pathname.slice('/videos/'.length));
 
     // Security: only allow .mp4 files from ~/.vif
@@ -267,6 +275,60 @@ export class JsonRpcServer {
     } catch (err) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Video not found' }));
+    }
+  }
+
+  /**
+   * Handle SFX file requests
+   */
+  private handleSfxRequest(req: IncomingMessage, res: ServerResponse, url: URL): void {
+    // Path format: /sfx/category/filename.ogg
+    const sfxPath = decodeURIComponent(url.pathname.slice('/sfx/'.length));
+
+    // Security: only allow audio files, no path traversal
+    const ext = extname(sfxPath).toLowerCase();
+    const allowedExts = ['.ogg', '.wav', '.mp3', '.m4a', '.aiff'];
+
+    if (!allowedExts.includes(ext) || sfxPath.includes('..')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden' }));
+      return;
+    }
+
+    // Resolve path relative to assets/sfx in project root
+    const projectRoot = resolve(import.meta.dirname, '..');
+    const fullPath = join(projectRoot, 'assets', 'sfx', sfxPath);
+
+    // Ensure path is within assets/sfx
+    if (!fullPath.startsWith(join(projectRoot, 'assets', 'sfx'))) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden' }));
+      return;
+    }
+
+    try {
+      const stats = statSync(fullPath);
+      const fileSize = stats.size;
+
+      // Content type based on extension
+      const contentTypes: Record<string, string> = {
+        '.ogg': 'audio/ogg',
+        '.wav': 'audio/wav',
+        '.mp3': 'audio/mpeg',
+        '.m4a': 'audio/mp4',
+        '.aiff': 'audio/aiff',
+      };
+
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': contentTypes[ext] || 'application/octet-stream',
+        'Cache-Control': 'public, max-age=31536000', // Cache for 1 year (immutable assets)
+      });
+
+      createReadStream(fullPath).pipe(res);
+    } catch (err) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Sound not found' }));
     }
   }
 
@@ -539,6 +601,8 @@ export class JsonRpcServer {
         return this.handleTimelinePanelCommand(id, method, cmd);
       case 'videos':
         return this.handleVideosCommand(id, method, cmd);
+      case 'sfx':
+        return this.handleSfxCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -1128,6 +1192,70 @@ export class JsonRpcServer {
     }
 
     return videos.sort((a, b) => b.modified.localeCompare(a.modified));
+  }
+
+  // ─── SFX Commands ───────────────────────────────────────────────────────────
+
+  private async handleSfxCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'list': {
+        // List SFX from assets/sfx directory
+        const projectRoot = resolve(import.meta.dirname, '..');
+        const sfxDir = join(projectRoot, 'assets', 'sfx');
+
+        try {
+          const categories = await this.scanSfxDir(sfxDir);
+          return { id, ok: true, categories, dir: sfxDir };
+        } catch (err) {
+          return { id, ok: true, categories: [], dir: sfxDir, error: 'No sounds found' };
+        }
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown sfx method: ${method}` };
+    }
+  }
+
+  private async scanSfxDir(dir: string): Promise<Array<{ name: string; sounds: Array<{ name: string; path: string; size: number }> }>> {
+    const categories: Array<{ name: string; sounds: Array<{ name: string; path: string; size: number }> }> = [];
+
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const categoryPath = join(dir, entry.name);
+          const sounds: Array<{ name: string; path: string; size: number }> = [];
+
+          const soundFiles = await readdir(categoryPath, { withFileTypes: true });
+          for (const sound of soundFiles) {
+            if (sound.isFile()) {
+              const ext = extname(sound.name).toLowerCase();
+              if (['.ogg', '.wav', '.mp3', '.m4a', '.aiff'].includes(ext)) {
+                const soundPath = join(categoryPath, sound.name);
+                const stats = await stat(soundPath);
+                sounds.push({
+                  name: sound.name,
+                  path: `${entry.name}/${sound.name}`,
+                  size: stats.size,
+                });
+              }
+            }
+          }
+
+          if (sounds.length > 0) {
+            categories.push({
+              name: entry.name,
+              sounds: sounds.sort((a, b) => a.name.localeCompare(b.name)),
+            });
+          }
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read
+    }
+
+    return categories.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   private send(ws: WebSocket, data: Response | ServerEvent): void {

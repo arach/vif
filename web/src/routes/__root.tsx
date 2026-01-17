@@ -40,6 +40,7 @@ function RootLayout() {
             <nav className="flex gap-1">
               <NavLink to="/">Dashboard</NavLink>
               <NavLink to="/scenes">Scenes</NavLink>
+              <NavLink to="/sounds">Sounds</NavLink>
               <NavLink to="/videos">Videos</NavLink>
               <NavLink to="/recordings">Post-Production</NavLink>
             </nav>

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VideosRouteImport } from './routes/videos'
 import { Route as TimelineOverlayRouteImport } from './routes/timeline-overlay'
+import { Route as SoundsRouteImport } from './routes/sounds'
 import { Route as ScenesRouteImport } from './routes/scenes'
 import { Route as RecordingsRouteImport } from './routes/recordings'
 import { Route as IndexRouteImport } from './routes/index'
@@ -23,6 +24,11 @@ const VideosRoute = VideosRouteImport.update({
 const TimelineOverlayRoute = TimelineOverlayRouteImport.update({
   id: '/timeline-overlay',
   path: '/timeline-overlay',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoundsRoute = SoundsRouteImport.update({
+  id: '/sounds',
+  path: '/sounds',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScenesRoute = ScenesRouteImport.update({
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/recordings': typeof RecordingsRoute
   '/scenes': typeof ScenesRoute
+  '/sounds': typeof SoundsRoute
   '/timeline-overlay': typeof TimelineOverlayRoute
   '/videos': typeof VideosRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/recordings': typeof RecordingsRoute
   '/scenes': typeof ScenesRoute
+  '/sounds': typeof SoundsRoute
   '/timeline-overlay': typeof TimelineOverlayRoute
   '/videos': typeof VideosRoute
 }
@@ -60,19 +68,33 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/recordings': typeof RecordingsRoute
   '/scenes': typeof ScenesRoute
+  '/sounds': typeof SoundsRoute
   '/timeline-overlay': typeof TimelineOverlayRoute
   '/videos': typeof VideosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/recordings' | '/scenes' | '/timeline-overlay' | '/videos'
+  fullPaths:
+    | '/'
+    | '/recordings'
+    | '/scenes'
+    | '/sounds'
+    | '/timeline-overlay'
+    | '/videos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/recordings' | '/scenes' | '/timeline-overlay' | '/videos'
+  to:
+    | '/'
+    | '/recordings'
+    | '/scenes'
+    | '/sounds'
+    | '/timeline-overlay'
+    | '/videos'
   id:
     | '__root__'
     | '/'
     | '/recordings'
     | '/scenes'
+    | '/sounds'
     | '/timeline-overlay'
     | '/videos'
   fileRoutesById: FileRoutesById
@@ -81,6 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   RecordingsRoute: typeof RecordingsRoute
   ScenesRoute: typeof ScenesRoute
+  SoundsRoute: typeof SoundsRoute
   TimelineOverlayRoute: typeof TimelineOverlayRoute
   VideosRoute: typeof VideosRoute
 }
@@ -99,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/timeline-overlay'
       fullPath: '/timeline-overlay'
       preLoaderRoute: typeof TimelineOverlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sounds': {
+      id: '/sounds'
+      path: '/sounds'
+      fullPath: '/sounds'
+      preLoaderRoute: typeof SoundsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scenes': {
@@ -129,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   RecordingsRoute: RecordingsRoute,
   ScenesRoute: ScenesRoute,
+  SoundsRoute: SoundsRoute,
   TimelineOverlayRoute: TimelineOverlayRoute,
   VideosRoute: VideosRoute,
 }
