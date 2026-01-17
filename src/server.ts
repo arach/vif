@@ -59,8 +59,11 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
+import { createServer as createHttpServer, IncomingMessage, ServerResponse } from 'http';
+import { createReadStream, statSync } from 'fs';
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, resolve, extname } from 'path';
+import { homedir } from 'os';
 import { VifAgent } from './agent-client.js';
 import { runScene } from './dsl/index.js';
 
@@ -98,10 +101,13 @@ export interface ServerOptions {
 
 export class JsonRpcServer {
   private wss: WebSocketServer | null = null;
+  private httpServer: ReturnType<typeof createHttpServer> | null = null;
   private clients: Set<WebSocket> = new Set();
+  private timelineSubscribers: Set<WebSocket> = new Set();
   private options: Required<ServerOptions>;
   private agent: VifAgent | null = null;
   private startTime: number = Date.now();
+  private currentSceneYaml: string | null = null;
 
   constructor(options: ServerOptions = {}) {
     this.options = {
@@ -140,7 +146,7 @@ export class JsonRpcServer {
     }
 
     // Start WebSocket server
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       try {
         this.wss = new WebSocketServer({
           port: this.options.port,
@@ -163,6 +169,105 @@ export class JsonRpcServer {
         reject(err);
       }
     });
+
+    // Start HTTP server for video streaming
+    await this.startHttpServer();
+  }
+
+  /**
+   * Start HTTP server for serving video files
+   */
+  private async startHttpServer(): Promise<void> {
+    const httpPort = this.options.port + 2; // 7852 (7851 often used by Talkie)
+
+    return new Promise((resolve, reject) => {
+      this.httpServer = createHttpServer((req, res) => {
+        this.handleHttpRequest(req, res);
+      });
+
+      this.httpServer.on('listening', () => {
+        this.log(`HTTP server listening on http://${this.options.host}:${httpPort}`);
+        resolve();
+      });
+
+      this.httpServer.on('error', (err) => {
+        this.log(`HTTP server error: ${err.message}`);
+        // Don't reject - HTTP server is optional
+        resolve();
+      });
+
+      this.httpServer.listen(httpPort, this.options.host);
+    });
+  }
+
+  /**
+   * Handle HTTP requests for video files
+   */
+  private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url || '/', `http://${req.headers.host}`);
+
+    // Only serve videos from /videos/ path
+    if (!url.pathname.startsWith('/videos/')) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
+    const videoName = decodeURIComponent(url.pathname.slice('/videos/'.length));
+
+    // Security: only allow .mp4 files from ~/.vif
+    if (!videoName.endsWith('.mp4') || videoName.includes('..') || videoName.includes('/')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden' }));
+      return;
+    }
+
+    const videoPath = join(homedir(), '.vif', videoName);
+
+    try {
+      const stats = statSync(videoPath);
+      const fileSize = stats.size;
+
+      // Handle range requests for video seeking
+      const range = req.headers.range;
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': 'video/mp4',
+        });
+
+        createReadStream(videoPath, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': 'video/mp4',
+        });
+
+        createReadStream(videoPath).pipe(res);
+      }
+    } catch (err) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Video not found' }));
+    }
   }
 
   /**
@@ -220,7 +325,7 @@ export class JsonRpcServer {
     ws.on('message', async (data) => {
       try {
         const message = JSON.parse(data.toString());
-        const response = await this.handleCommand(message);
+        const response = await this.handleCommand(message, ws);
         this.send(ws, response);
       } catch (err) {
         this.send(ws, {
@@ -241,7 +346,7 @@ export class JsonRpcServer {
     });
   }
 
-  private async handleCommand(cmd: Command): Promise<Response> {
+  private async handleCommand(cmd: Command, ws?: WebSocket): Promise<Response> {
     const { id, action } = cmd;
 
     // Enhanced logging with coordinates/params
@@ -254,6 +359,26 @@ export class JsonRpcServer {
     }
 
     try {
+      // Handle timeline actions (don't require agent)
+      if (action === 'timeline.subscribe') {
+        if (ws) {
+          this.timelineSubscribers.add(ws);
+          this.log(`Timeline subscriber added (${this.timelineSubscribers.size} total)`);
+          if (this.currentSceneYaml) {
+            this.send(ws, { event: 'timeline.scene', yaml: this.currentSceneYaml });
+          }
+        }
+        return { id, ok: true, subscribed: true };
+      }
+
+      if (action === 'timeline.step') {
+        const index = cmd.index as number;
+        if (typeof index === 'number') {
+          this.emitTimelineStep(index);
+        }
+        return { id, ok: true };
+      }
+
       // Handle namespaced actions (cursor.*, keys.*, typer.*)
       if (action.includes('.')) {
         return await this.handleAgentCommand(id, action, cmd);
@@ -337,6 +462,29 @@ export class JsonRpcServer {
           };
         }
 
+        case 'timeline.subscribe': {
+          // Subscribe this client to timeline updates
+          if (ws) {
+            this.timelineSubscribers.add(ws);
+            this.log(`Timeline subscriber added (${this.timelineSubscribers.size} total)`);
+
+            // If a scene is currently running, send it
+            if (this.currentSceneYaml) {
+              this.send(ws, { event: 'timeline.scene', yaml: this.currentSceneYaml });
+            }
+          }
+          return { id, ok: true, subscribed: true };
+        }
+
+        case 'timeline.step': {
+          // Relay step event to timeline subscribers
+          const index = cmd.index as number;
+          if (typeof index === 'number') {
+            this.emitTimelineStep(index);
+          }
+          return { id, ok: true };
+        }
+
         case 'restart': {
           this.log('🔄 Restart requested, exiting...');
           setTimeout(() => process.exit(0), 100);
@@ -387,6 +535,10 @@ export class JsonRpcServer {
         return this.handlePanelCommand(id, method, cmd);
       case 'scenes':
         return this.handleScenesCommand(id, method, cmd);
+      case 'timeline':
+        return this.handleTimelinePanelCommand(id, method, cmd);
+      case 'videos':
+        return this.handleVideosCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -680,6 +832,44 @@ export class JsonRpcServer {
     }
   }
 
+  private async handleTimelinePanelCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'show':
+        await this.agent!.timelineShow();
+        return { id, ok: true };
+
+      case 'hide':
+        await this.agent!.timelineHide();
+        return { id, ok: true };
+
+      case 'scene': {
+        const yaml = cmd.yaml as string;
+        if (yaml) {
+          await this.agent!.timelineScene(yaml);
+        }
+        return { id, ok: true };
+      }
+
+      case 'step':
+      case 'setstep': {
+        // 'setstep' is used by dashboard to set panel step without broadcasting
+        // 'step' can also come through here if not intercepted early
+        const index = cmd.index as number;
+        if (typeof index === 'number') {
+          await this.agent!.timelineStep(index);
+        }
+        return { id, ok: true };
+      }
+
+      case 'reset':
+        await this.agent!.timelineReset();
+        return { id, ok: true };
+
+      default:
+        return { id, ok: false, error: `Unknown timeline method: ${method}` };
+    }
+  }
+
   private async handleStageCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
     switch (method) {
       case 'set': {
@@ -789,15 +979,25 @@ export class JsonRpcServer {
         this.runningScene = { name: path, startTime: Date.now() };
         this.log(`▶ Running scene: ${path}`);
 
+        // Read YAML and emit timeline event
+        try {
+          const yaml = await readFile(fullPath, 'utf-8');
+          this.emitTimelineScene(yaml);
+        } catch {
+          // Ignore - timeline is optional
+        }
+
         // Run scene in background, don't await
         runScene(fullPath, { port: this.options.port })
           .then(() => {
             this.log(`✓ Scene completed: ${path}`);
             this.runningScene = null;
+            this.emitTimelineComplete();
           })
           .catch((err) => {
             this.log(`✗ Scene failed: ${err.message}`);
             this.runningScene = null;
+            this.emitTimelineComplete();
           });
 
         return { id, ok: true, message: `Started scene: ${path}` };
@@ -845,6 +1045,91 @@ export class JsonRpcServer {
     return scenes.sort((a, b) => b.modified.localeCompare(a.modified));
   }
 
+  // ─── Videos Commands ─────────────────────────────────────────────────────────
+
+  private async handleVideosCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'list': {
+        // List videos from ~/.vif directory
+        const videosDir = join(homedir(), '.vif');
+
+        try {
+          const videos = await this.scanVideosDir(videosDir);
+          return { id, ok: true, videos, dir: videosDir };
+        } catch (err) {
+          return { id, ok: true, videos: [], dir: videosDir, error: `No videos found` };
+        }
+      }
+
+      case 'info': {
+        // Get info about a specific video
+        const name = cmd.name as string;
+        if (!name) return { id, ok: false, error: 'videos.info requires name' };
+
+        const videosDir = join(homedir(), '.vif');
+        const videoPath = join(videosDir, name);
+
+        try {
+          const stats = await stat(videoPath);
+          return {
+            id,
+            ok: true,
+            name,
+            path: videoPath,
+            size: stats.size,
+            modified: stats.mtime.toISOString(),
+          };
+        } catch {
+          return { id, ok: false, error: `Video not found: ${name}` };
+        }
+      }
+
+      case 'delete': {
+        // Delete a video
+        const name = cmd.name as string;
+        if (!name) return { id, ok: false, error: 'videos.delete requires name' };
+
+        const videosDir = join(homedir(), '.vif');
+        const videoPath = join(videosDir, name);
+
+        try {
+          const { unlink } = await import('fs/promises');
+          await unlink(videoPath);
+          return { id, ok: true, deleted: name };
+        } catch {
+          return { id, ok: false, error: `Failed to delete: ${name}` };
+        }
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown videos method: ${method}` };
+    }
+  }
+
+  private async scanVideosDir(dir: string): Promise<Array<{ name: string; size: number; modified: string }>> {
+    const videos: Array<{ name: string; size: number; modified: string }> = [];
+
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.mp4')) {
+          const fullPath = join(dir, entry.name);
+          const stats = await stat(fullPath);
+          videos.push({
+            name: entry.name,
+            size: stats.size,
+            modified: stats.mtime.toISOString(),
+          });
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read
+    }
+
+    return videos.sort((a, b) => b.modified.localeCompare(a.modified));
+  }
+
   private send(ws: WebSocket, data: Response | ServerEvent): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
@@ -854,6 +1139,47 @@ export class JsonRpcServer {
   private log(msg: string): void {
     // Always log - this is useful for debugging demos
     console.log(`[vif] ${msg}`);
+  }
+
+  /**
+   * Emit timeline event when a scene starts
+   */
+  emitTimelineScene(yaml: string): void {
+    this.currentSceneYaml = yaml;
+    for (const ws of this.timelineSubscribers) {
+      if (ws.readyState === WebSocket.OPEN) {
+        this.send(ws, { event: 'timeline.scene', yaml });
+      } else {
+        this.timelineSubscribers.delete(ws);
+      }
+    }
+  }
+
+  /**
+   * Emit timeline event when a step starts
+   */
+  emitTimelineStep(index: number): void {
+    for (const ws of this.timelineSubscribers) {
+      if (ws.readyState === WebSocket.OPEN) {
+        this.send(ws, { event: 'timeline.step', index });
+      } else {
+        this.timelineSubscribers.delete(ws);
+      }
+    }
+  }
+
+  /**
+   * Emit timeline event when scene completes
+   */
+  emitTimelineComplete(): void {
+    this.currentSceneYaml = null;
+    for (const ws of this.timelineSubscribers) {
+      if (ws.readyState === WebSocket.OPEN) {
+        this.send(ws, { event: 'timeline.complete' });
+      } else {
+        this.timelineSubscribers.delete(ws);
+      }
+    }
   }
 
   private formatParams(cmd: Command): string {

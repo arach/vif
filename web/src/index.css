@@ -36,8 +36,8 @@
     @apply bg-gradient-to-b from-white/[0.08] to-white/[0.02]
            backdrop-blur-xl
            border border-white/[0.08]
-           rounded-xl
-           shadow-inner-glow;
+           rounded-xl;
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
   }
 
   /* Subtle glow button */
@@ -56,7 +56,7 @@
   }
 
   .glow-button:hover {
-    @apply shadow-glow-sm;
+    box-shadow: 0 0 15px -3px rgb(99 102 241 / 0.3);
   }
 
   /* Status dot with glow */
@@ -100,4 +100,57 @@
   opacity: 0.03;
   pointer-events: none;
   border-radius: inherit;
+}
+
+/* Pierre Diffs / Code View Styles */
+.code-view,
+.scene-diff {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.code-view [data-pierre-diffs],
+.scene-diff [data-pierre-diffs] {
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+.code-view pre,
+.scene-diff pre {
+  padding: 16px !important;
+  margin: 0 !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Line numbers styling */
+.code-view [data-line-number],
+.scene-diff [data-line-number] {
+  color: #6b7280 !important;
+  padding-right: 16px !important;
+  user-select: none;
+}
+
+/* Diff addition/deletion backgrounds */
+.scene-diff [data-diff-type="addition"] {
+  background: rgba(34, 197, 94, 0.1) !important;
+}
+
+.scene-diff [data-diff-type="deletion"] {
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Scene Editor */
+.scene-editor [data-pierre-diffs] {
+  background: transparent !important;
+}
+
+.scene-editor pre {
+  padding: 16px !important;
+  margin: 0 !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.scene-editor-code {
+  font-size: 13px;
+  line-height: 1.6;
 }

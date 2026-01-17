@@ -40,18 +40,22 @@ function RootLayout() {
             <nav className="flex gap-1">
               <NavLink to="/">Dashboard</NavLink>
               <NavLink to="/scenes">Scenes</NavLink>
+              <NavLink to="/videos">Videos</NavLink>
               <NavLink to="/recordings">Post-Production</NavLink>
             </nav>
           </div>
-          <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              connected
-                ? 'bg-vif-success/10 text-vif-success border border-vif-success/20'
-                : 'bg-vif-danger/10 text-vif-danger border border-vif-danger/20'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${connected ? 'bg-vif-success' : 'bg-vif-danger'}`} />
+          <div className="flex items-center gap-2 text-sm">
+            <span className="relative flex h-2.5 w-2.5">
+              {connected && (
+                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+              )}
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                connected ? 'bg-green-400' : 'bg-red-400'
+              }`} />
+            </span>
+            <span className={connected ? 'text-neutral-300' : 'text-red-400'}>
               {connected ? 'Connected' : 'Disconnected'}
-            </div>
+            </span>
           </div>
         </div>
       </header>

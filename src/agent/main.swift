@@ -1279,6 +1279,492 @@ class ViewportMaskView: NSView {
     }
 }
 
+// MARK: - Timeline Panel Window
+
+class TimelinePanelWindow: NSWindow {
+    let webView: WKWebView
+    var currentStep: Int = -1
+    var sceneYaml: String = ""
+    let panelWidth: CGFloat = 300
+
+    init() {
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let height = screen.frame.height - 100  // Leave some margin
+
+        // Configure web view
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+
+        webView = WKWebView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: height), configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
+
+        let frame = NSRect(x: 20, y: 50, width: panelWidth, height: height)
+        super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) - 1)  // Below cursor but above normal
+        ignoresMouseEvents = false  // Allow scrolling
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        contentView = webView
+
+        // Load the timeline HTML
+        loadTimelineHTML()
+    }
+
+    func loadTimelineHTML() {
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body {
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(9, 9, 11, 0.95);
+                    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+                    color: #fff;
+                    overflow: hidden;
+                    border-radius: 12px;
+                }
+                #container {
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    border: 1px solid rgba(255,255,255,0.1);
+                    border-radius: 12px;
+                    overflow: hidden;
+                }
+                #header {
+                    padding: 12px 16px;
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    background: rgba(255,255,255,0.02);
+                }
+                #controls {
+                    padding: 10px 16px;
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    background: rgba(255,255,255,0.02);
+                }
+                .ctrl-btn {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 8px;
+                    border: 1px solid rgba(255,255,255,0.15);
+                    background: rgba(255,255,255,0.05);
+                    color: rgba(255,255,255,0.7);
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: all 0.15s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .ctrl-btn:hover {
+                    background: rgba(255,255,255,0.1);
+                    border-color: rgba(255,255,255,0.25);
+                    color: #fff;
+                }
+                .ctrl-btn:active {
+                    transform: scale(0.95);
+                }
+                .ctrl-btn.play {
+                    width: 44px;
+                    height: 44px;
+                    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+                    border: none;
+                    color: #fff;
+                    font-size: 18px;
+                }
+                .ctrl-btn.play:hover {
+                    background: linear-gradient(135deg, #818cf8, #a78bfa);
+                }
+                .ctrl-btn.play.playing {
+                    background: linear-gradient(135deg, #f87171, #ef4444);
+                }
+                .ctrl-btn.play.playing:hover {
+                    background: linear-gradient(135deg, #fca5a5, #f87171);
+                }
+                .ctrl-btn:disabled {
+                    opacity: 0.3;
+                    cursor: not-allowed;
+                }
+                .dot {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: #4ade80;
+                    box-shadow: 0 0 8px #4ade80;
+                }
+                .title { font-size: 14px; font-weight: 600; opacity: 0.9; }
+                #steps {
+                    flex: 1;
+                    overflow-y: auto;
+                    padding: 16px 20px;
+                }
+                .step {
+                    position: relative;
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 12px;
+                    padding-bottom: 16px;
+                    transition: all 0.3s ease;
+                }
+                .step.active { transform: scale(1.02); }
+                .step.completed { opacity: 0.5; }
+                .step.pending { opacity: 0.3; }
+                .connector {
+                    position: absolute;
+                    left: 15px;
+                    top: -8px;
+                    width: 2px;
+                    height: 8px;
+                    background: #3f3f46;
+                    transition: background 0.3s;
+                }
+                .step.completed .connector { background: #4ade80; }
+                .node {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 14px;
+                    background: #27272a;
+                    border: 2px solid #3f3f46;
+                    flex-shrink: 0;
+                    transition: all 0.3s;
+                }
+                .step.active .node {
+                    box-shadow: 0 0 12px var(--step-color, #6366f1);
+                    border-color: var(--step-color, #6366f1);
+                    background: var(--step-color, #6366f1);
+                }
+                .step.completed .node {
+                    background: #4ade80;
+                    border-color: #4ade80;
+                }
+                .content { flex: 1; padding-top: 4px; min-width: 0; }
+                .label { font-size: 13px; font-weight: 500; }
+                .detail { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .duration {
+                    font-size: 10px;
+                    padding: 2px 6px;
+                    background: rgba(255,255,255,0.1);
+                    border-radius: 4px;
+                    color: rgba(255,255,255,0.6);
+                    font-family: monospace;
+                }
+                #footer {
+                    padding: 12px 20px;
+                    border-top: 1px solid rgba(255,255,255,0.1);
+                    font-size: 12px;
+                    color: rgba(255,255,255,0.5);
+                    text-align: center;
+                }
+                #empty {
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: rgba(255,255,255,0.3);
+                    font-size: 13px;
+                }
+                ::-webkit-scrollbar { width: 6px; }
+                ::-webkit-scrollbar-track { background: transparent; }
+                ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+            </style>
+        </head>
+        <body>
+            <div id="container">
+                <div id="header">
+                    <div class="dot" id="status-dot"></div>
+                    <span class="title" id="scene-name">Timeline</span>
+                </div>
+                <div id="controls">
+                    <button class="ctrl-btn" id="btn-reset" title="Reset">↺</button>
+                    <button class="ctrl-btn" id="btn-prev" title="Previous">◀</button>
+                    <button class="ctrl-btn play" id="btn-play" title="Play">▶</button>
+                    <button class="ctrl-btn" id="btn-next" title="Next">▶</button>
+                    <button class="ctrl-btn" id="btn-end" title="Go to end">⏭</button>
+                </div>
+                <div id="steps"></div>
+                <div id="empty">No scene loaded</div>
+                <div id="footer">0 steps</div>
+            </div>
+            <script>
+                const stepsEl = document.getElementById('steps');
+                const emptyEl = document.getElementById('empty');
+                const footerEl = document.getElementById('footer');
+                const sceneNameEl = document.getElementById('scene-name');
+                const statusDot = document.getElementById('status-dot');
+                const btnPlay = document.getElementById('btn-play');
+                const btnPrev = document.getElementById('btn-prev');
+                const btnNext = document.getElementById('btn-next');
+                const btnReset = document.getElementById('btn-reset');
+                const btnEnd = document.getElementById('btn-end');
+
+                let steps = [];
+                let currentStep = -1;
+                let isPlaying = false;
+                let playInterval = null;
+                let playSpeed = 600; // ms between steps
+
+                // Playback controls
+                function updatePlayButton() {
+                    btnPlay.textContent = isPlaying ? '⏸' : '▶';
+                    btnPlay.classList.toggle('playing', isPlaying);
+                    statusDot.style.background = isPlaying ? '#f87171' : '#4ade80';
+                    statusDot.style.boxShadow = isPlaying ? '0 0 8px #f87171' : '0 0 8px #4ade80';
+                }
+
+                function stopPlayback() {
+                    if (playInterval) {
+                        clearInterval(playInterval);
+                        playInterval = null;
+                    }
+                    isPlaying = false;
+                    updatePlayButton();
+                }
+
+                function startPlayback() {
+                    if (steps.length === 0) return;
+                    isPlaying = true;
+                    updatePlayButton();
+
+                    // Start from beginning if at end
+                    if (currentStep >= steps.length - 1) {
+                        currentStep = -1;
+                    }
+
+                    playInterval = setInterval(() => {
+                        if (currentStep < steps.length - 1) {
+                            currentStep++;
+                            render();
+                        } else {
+                            stopPlayback();
+                        }
+                    }, playSpeed);
+                }
+
+                function togglePlay() {
+                    if (isPlaying) {
+                        stopPlayback();
+                    } else {
+                        startPlayback();
+                    }
+                }
+
+                function stepPrev() {
+                    stopPlayback();
+                    if (currentStep > 0) {
+                        currentStep--;
+                        render();
+                    } else if (currentStep === -1 && steps.length > 0) {
+                        currentStep = 0;
+                        render();
+                    }
+                }
+
+                function stepNext() {
+                    stopPlayback();
+                    if (currentStep < steps.length - 1) {
+                        currentStep++;
+                        render();
+                    }
+                }
+
+                function goToEnd() {
+                    stopPlayback();
+                    if (steps.length > 0) {
+                        currentStep = steps.length - 1;
+                        render();
+                    }
+                }
+
+                function resetPlayback() {
+                    stopPlayback();
+                    currentStep = -1;
+                    render();
+                }
+
+                // Event listeners
+                btnPlay.onclick = togglePlay;
+                btnPrev.onclick = stepPrev;
+                btnNext.onclick = stepNext;
+                btnReset.onclick = resetPlayback;
+                btnEnd.onclick = goToEnd;
+
+                const stepConfig = {
+                    'wait': { icon: '⏱', color: '#a3a3a3', label: 'Wait' },
+                    'label': { icon: '💬', color: '#c084fc', label: 'Label' },
+                    'label.update': { icon: '✏️', color: '#c084fc', label: 'Update' },
+                    'label.hide': { icon: '🙈', color: '#c084fc', label: 'Hide Label' },
+                    'record': { icon: '⏺', color: '#f87171', label: 'Record' },
+                    'cursor.show': { icon: '↖', color: '#22d3ee', label: 'Cursor' },
+                    'cursor.hide': { icon: '↗', color: '#22d3ee', label: 'Hide Cursor' },
+                    'click': { icon: '👆', color: '#facc15', label: 'Click' },
+                    'navigate': { icon: '🧭', color: '#4ade80', label: 'Navigate' },
+                };
+
+                function parseYaml(yaml) {
+                    const lines = yaml.split('\\n');
+                    const parsed = [];
+                    let sceneName = 'Scene';
+                    let inSequence = false;
+
+                    for (const line of lines) {
+                        if (line.match(/^\\s*name:/)) {
+                            sceneName = line.split(':')[1]?.trim() || 'Scene';
+                        }
+                        if (line.match(/^sequence:/)) {
+                            inSequence = true;
+                            continue;
+                        }
+                        if (inSequence && line.match(/^\\s+-\\s/)) {
+                            const match = line.match(/^\\s+-\\s+(\\S+):/);
+                            if (match) {
+                                const type = match[1];
+                                const config = stepConfig[type] || { icon: '◆', color: '#6b7280', label: type };
+                                const value = line.split(':').slice(1).join(':').trim();
+                                parsed.push({
+                                    type,
+                                    icon: config.icon,
+                                    color: config.color,
+                                    label: config.label,
+                                    detail: value || null
+                                });
+                            }
+                        }
+                    }
+                    return { sceneName, steps: parsed };
+                }
+
+                function render() {
+                    // Update button states
+                    const hasSteps = steps.length > 0;
+                    btnPlay.disabled = !hasSteps;
+                    btnPrev.disabled = !hasSteps || currentStep <= 0;
+                    btnNext.disabled = !hasSteps || currentStep >= steps.length - 1;
+                    btnReset.disabled = !hasSteps || currentStep === -1;
+                    btnEnd.disabled = !hasSteps || currentStep >= steps.length - 1;
+
+                    if (steps.length === 0) {
+                        stepsEl.style.display = 'none';
+                        emptyEl.style.display = 'flex';
+                        footerEl.textContent = '0 steps';
+                        return;
+                    }
+                    stepsEl.style.display = 'block';
+                    emptyEl.style.display = 'none';
+
+                    stepsEl.innerHTML = steps.map((step, i) => {
+                        const isActive = i === currentStep;
+                        const isCompleted = currentStep >= 0 && i < currentStep;
+                        const isPending = currentStep >= 0 && i > currentStep;
+                        const classes = ['step'];
+                        if (isActive) classes.push('active');
+                        if (isCompleted) classes.push('completed');
+                        if (isPending) classes.push('pending');
+
+                        return `
+                            <div class="${classes.join(' ')}" style="--step-color: ${step.color}">
+                                ${i > 0 ? '<div class="connector"></div>' : ''}
+                                <div class="node">${isCompleted && !isActive ? '✓' : step.icon}</div>
+                                <div class="content">
+                                    <div class="label">${step.label}</div>
+                                    ${step.detail ? `<div class="detail">${step.detail}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    const status = currentStep >= 0 ? `${currentStep + 1} / ${steps.length}` : `${steps.length} steps`;
+                    footerEl.textContent = status;
+
+                    // Scroll active into view
+                    if (currentStep >= 0) {
+                        const activeEl = stepsEl.children[currentStep];
+                        if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+
+                // API called from Swift (external control)
+                window.setScene = function(yaml) {
+                    stopPlayback();  // Stop local playback
+                    const { sceneName, steps: parsedSteps } = parseYaml(yaml);
+                    sceneNameEl.textContent = sceneName;
+                    steps = parsedSteps;
+                    currentStep = -1;
+                    render();
+                };
+
+                window.setStep = function(index) {
+                    // External step control - stop local playback
+                    stopPlayback();
+                    currentStep = index;
+                    render();
+                };
+
+                window.reset = function() {
+                    stopPlayback();
+                    steps = [];
+                    currentStep = -1;
+                    sceneNameEl.textContent = 'Timeline';
+                    render();
+                };
+
+                // Allow external control of playback
+                window.play = function() { if (!isPlaying) startPlayback(); };
+                window.pause = function() { stopPlayback(); };
+                window.togglePlayback = togglePlay;
+
+                render();
+            </script>
+        </body>
+        </html>
+        """
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func showPanel() {
+        orderFrontRegardless()
+    }
+
+    func hidePanel() {
+        orderOut(nil)
+    }
+
+    func setScene(yaml: String) {
+        sceneYaml = yaml
+        let escaped = yaml.replacingOccurrences(of: "\\", with: "\\\\")
+                          .replacingOccurrences(of: "`", with: "\\`")
+                          .replacingOccurrences(of: "\n", with: "\\n")
+        webView.evaluateJavaScript("setScene(`\(escaped)`)", completionHandler: nil)
+    }
+
+    func setStep(index: Int) {
+        currentStep = index
+        webView.evaluateJavaScript("setStep(\(index))", completionHandler: nil)
+    }
+
+    func reset() {
+        sceneYaml = ""
+        currentStep = -1
+        webView.evaluateJavaScript("reset()", completionHandler: nil)
+    }
+}
+
 // MARK: - Control Panel Window
 
 class ControlPanelWindow: NSWindow {
@@ -2002,17 +2488,35 @@ class VifAgent: NSObject, NSApplicationDelegate {
     lazy var labelWindow = LabelWindow()
     lazy var recorder = ScreenRecorder()
     lazy var controlPanel = ControlPanelWindow()
+    lazy var timelinePanel = TimelinePanelWindow()
     var headlessMode = false  // When true, control panel stays hidden
+    var useSocketMode = false  // When true, use Unix socket instead of stdio
+    var socketPath = "/tmp/vif-agent.sock"
+    var socketServer: SocketServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Emit ready FIRST so server knows we're alive
-        print("{\"event\":\"ready\",\"version\":\"1.0\"}")
-        fflush(stdout)
+        if useSocketMode {
+            // Socket mode - start Unix socket server
+            socketServer = SocketServer(path: socketPath)
+            socketServer?.onCommand = { [weak self] line in
+                self?.handleCommand(line)
+            }
+            do {
+                try socketServer?.start()
+                // Signal ready via socket (will be sent when client connects)
+                fputs("[agent] Running in socket mode\n", stderr)
+            } catch {
+                fputs("[agent] Failed to start socket server: \(error)\n", stderr)
+            }
+        } else {
+            // Stdio mode - emit ready and read stdin
+            print("{\"event\":\"ready\",\"version\":\"1.0\"}")
+            fflush(stdout)
 
-        // Read stdin
-        DispatchQueue.global(qos: .userInteractive).async {
-            while let line = readLine() {
-                self.handleCommand(line)
+            DispatchQueue.global(qos: .userInteractive).async {
+                while let line = readLine() {
+                    self.handleCommand(line)
+                }
             }
         }
 
@@ -2217,6 +2721,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handleVoice(cmd, json)
         case "panel":
             handlePanel(cmd, json)
+        case "timeline":
+            handleTimeline(cmd, json)
         default:
             if action == "quit" {
                 respond(["ok": true])
@@ -2589,6 +3095,42 @@ class VifAgent: NSObject, NSApplicationDelegate {
         }
     }
 
+    func handleTimeline(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "show":
+            timelinePanel.showPanel()
+            fputs("[agent] timeline: showing\n", stderr)
+            respond(["ok": true])
+
+        case "hide":
+            timelinePanel.hidePanel()
+            fputs("[agent] timeline: hidden\n", stderr)
+            respond(["ok": true])
+
+        case "scene":
+            if let yaml = json["yaml"] as? String {
+                timelinePanel.setScene(yaml: yaml)
+                fputs("[agent] timeline: scene loaded\n", stderr)
+            }
+            respond(["ok": true])
+
+        case "step":
+            if let index = json["index"] as? Int {
+                timelinePanel.setStep(index: index)
+                fputs("[agent] timeline: step \(index)\n", stderr)
+            }
+            respond(["ok": true])
+
+        case "reset":
+            timelinePanel.reset()
+            fputs("[agent] timeline: reset\n", stderr)
+            respond(["ok": true])
+
+        default:
+            respond(["ok": false, "error": "unknown timeline cmd: \(cmd)"])
+        }
+    }
+
     // MARK: - Voice (Audio Playback through BlackHole)
 
     private var voiceProcess: Process?
@@ -2714,16 +3256,158 @@ class VifAgent: NSObject, NSApplicationDelegate {
     func respond(_ dict: [String: Any]) {
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let str = String(data: data, encoding: .utf8) {
-            print(str)
-            fflush(stdout)
+            if useSocketMode {
+                socketServer?.send(str)
+            } else {
+                print(str)
+                fflush(stdout)
+            }
         }
+    }
+
+    func emitEvent(_ dict: [String: Any]) {
+        respond(dict)
+    }
+}
+
+// MARK: - Unix Socket Server
+
+class SocketServer {
+    let socketPath: String
+    var serverSocket: Int32 = -1
+    var clientSocket: Int32 = -1
+    var onCommand: ((String) -> Void)?
+
+    init(path: String = "/tmp/vif-agent.sock") {
+        self.socketPath = path
+    }
+
+    func start() throws {
+        // Remove existing socket file
+        unlink(socketPath)
+
+        // Create socket
+        serverSocket = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard serverSocket >= 0 else {
+            throw NSError(domain: "SocketServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create socket"])
+        }
+
+        // Bind
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        socketPath.withCString { ptr in
+            withUnsafeMutablePointer(to: &addr.sun_path.0) { dest in
+                strcpy(dest, ptr)
+            }
+        }
+
+        let bindResult = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                bind(serverSocket, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard bindResult >= 0 else {
+            throw NSError(domain: "SocketServer", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to bind socket"])
+        }
+
+        // Listen
+        guard listen(serverSocket, 5) >= 0 else {
+            throw NSError(domain: "SocketServer", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to listen on socket"])
+        }
+
+        fputs("[agent] Socket server listening on \(socketPath)\n", stderr)
+
+        // Accept connections in background
+        DispatchQueue.global(qos: .userInteractive).async {
+            self.acceptLoop()
+        }
+    }
+
+    private func acceptLoop() {
+        while serverSocket >= 0 {
+            var clientAddr = sockaddr_un()
+            var clientLen = socklen_t(MemoryLayout<sockaddr_un>.size)
+
+            let client = withUnsafeMutablePointer(to: &clientAddr) { ptr in
+                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                    accept(serverSocket, sockaddrPtr, &clientLen)
+                }
+            }
+
+            if client >= 0 {
+                fputs("[agent] Client connected\n", stderr)
+                clientSocket = client
+                handleClient(client)
+            }
+        }
+    }
+
+    private func handleClient(_ socket: Int32) {
+        var buffer = [CChar](repeating: 0, count: 65536)
+        var lineBuffer = ""
+
+        while socket >= 0 {
+            let bytesRead = read(socket, &buffer, buffer.count - 1)
+            if bytesRead <= 0 {
+                fputs("[agent] Client disconnected\n", stderr)
+                clientSocket = -1
+                break
+            }
+
+            buffer[bytesRead] = 0
+            if let str = String(cString: buffer, encoding: .utf8) {
+                lineBuffer += str
+
+                // Process complete lines
+                while let range = lineBuffer.range(of: "\n") {
+                    let line = String(lineBuffer[..<range.lowerBound])
+                    lineBuffer = String(lineBuffer[range.upperBound...])
+
+                    if !line.isEmpty {
+                        onCommand?(line)
+                    }
+                }
+            }
+        }
+    }
+
+    func send(_ message: String) {
+        guard clientSocket >= 0 else { return }
+        let data = message + "\n"
+        data.withCString { ptr in
+            _ = write(clientSocket, ptr, strlen(ptr))
+        }
+    }
+
+    func stop() {
+        if clientSocket >= 0 {
+            close(clientSocket)
+            clientSocket = -1
+        }
+        if serverSocket >= 0 {
+            close(serverSocket)
+            serverSocket = -1
+        }
+        unlink(socketPath)
     }
 }
 
 // MARK: - Main
 
+// Parse command line arguments
+let args = CommandLine.arguments
+let useSocket = args.contains("--socket")
+let socketPath = args.first(where: { $0.hasPrefix("--socket-path=") })?.dropFirst(14).description ?? "/tmp/vif-agent.sock"
+
 let app = NSApplication.shared
 let agent = VifAgent()
+
+// Configure socket mode if requested
+if useSocket {
+    agent.useSocketMode = true
+    agent.socketPath = socketPath
+}
+
 app.delegate = agent
 app.setActivationPolicy(.accessory)
 app.run()

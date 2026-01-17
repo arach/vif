@@ -356,8 +356,11 @@ export class SceneRunner {
       // Setup stage
       await this.setupStage();
 
-      // Execute sequence
-      for (const action of this.scene.sequence) {
+      // Execute sequence with step tracking for timeline
+      for (let i = 0; i < this.scene.sequence.length; i++) {
+        const action = this.scene.sequence[i];
+        // Emit step start event for timeline visualization
+        this.send('timeline.step', { index: i }).catch(() => {});
         await this.executeAction(action);
       }
 

@@ -105,7 +105,8 @@ export class VifClient {
       if (data.error) {
         pending.reject(new Error(data.error))
       } else {
-        pending.resolve(data.result)
+        // Server returns data at top level, not in a 'result' property
+        pending.resolve(data)
       }
       return
     }

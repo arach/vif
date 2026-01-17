@@ -1,26 +1,39 @@
 /**
  * Vif Agent Client
  *
- * Spawns and communicates with the native Vif Agent for cursor,
+ * Launches and communicates with the native Vif Agent for cursor,
  * keyboard, and typing overlays.
+ *
+ * Uses Unix socket for communication to ensure the agent gets its own
+ * process identity for macOS permissions.
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import { join, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import { homedir } from 'os';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
 import { fileURLToPath } from 'url';
+import * as net from 'net';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Agent binary locations (in order of preference)
-const AGENT_PATHS = [
+// Socket path for agent communication
+const SOCKET_PATH = '/tmp/vif-agent.sock';
+
+// Agent app bundle locations (in order of preference)
+const AGENT_APP_PATHS = [
   // Development: local build
-  join(__dirname, '..', 'dist', 'Vif Agent.app', 'Contents', 'MacOS', 'vif-agent'),
+  join(__dirname, '..', 'dist', 'Vif Agent.app'),
   // Production: ~/.vif install
+  join(homedir(), '.vif', 'Vif Agent.app'),
+];
+
+// Legacy binary paths (for fallback)
+const AGENT_PATHS = [
+  join(__dirname, '..', 'dist', 'Vif Agent.app', 'Contents', 'MacOS', 'vif-agent'),
   join(homedir(), '.vif', 'Vif Agent.app', 'Contents', 'MacOS', 'vif-agent'),
 ];
 
@@ -32,13 +45,24 @@ export interface AgentResponse {
 }
 
 export class VifAgent extends EventEmitter {
-  private process: ChildProcess | null = null;
-  private rl: readline.Interface | null = null;
+  private socket: net.Socket | null = null;
   private ready = false;
   private queue: Array<{ resolve: (r: AgentResponse) => void; reject: (e: Error) => void }> = [];
+  private lineBuffer = '';
+  private useSocketMode = true; // New socket-based communication
 
   /**
-   * Find the agent binary
+   * Find the agent app bundle
+   */
+  static findAppBundle(): string | null {
+    for (const p of AGENT_APP_PATHS) {
+      if (existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  /**
+   * Find the agent binary (legacy)
    */
   static findBinary(): string | null {
     for (const p of AGENT_PATHS) {
@@ -51,56 +75,133 @@ export class VifAgent extends EventEmitter {
    * Check if agent is available
    */
   static isAvailable(): boolean {
-    return VifAgent.findBinary() !== null;
+    return VifAgent.findAppBundle() !== null || VifAgent.findBinary() !== null;
   }
 
   /**
    * Start the agent process
    */
   async start(): Promise<void> {
+    const appBundle = VifAgent.findAppBundle();
+
+    if (this.useSocketMode && appBundle) {
+      return this.startSocketMode(appBundle);
+    } else {
+      // Fallback to legacy stdio mode
+      return this.startStdioMode();
+    }
+  }
+
+  /**
+   * Start agent in socket mode (preferred)
+   * Launches app via `open` for proper process identity
+   */
+  private async startSocketMode(appBundle: string): Promise<void> {
+    // Clean up any existing socket
+    try {
+      unlinkSync(SOCKET_PATH);
+    } catch {
+      // Ignore if doesn't exist
+    }
+
+    // Launch the app bundle with socket mode flag
+    try {
+      execSync(`open -a "${appBundle}" --args --socket --socket-path=${SOCKET_PATH}`, {
+        stdio: 'ignore',
+      });
+    } catch (err) {
+      throw new Error(`Failed to launch agent: ${err}`);
+    }
+
+    // Wait for socket to become available
+    await this.waitForSocket(SOCKET_PATH, 10000);
+
+    // Connect to the socket
+    return new Promise((resolve, reject) => {
+      this.socket = net.createConnection(SOCKET_PATH);
+
+      this.socket.on('connect', () => {
+        console.error('[agent] Connected via socket');
+        this.ready = true;
+        this.emit('ready');
+        resolve();
+      });
+
+      this.socket.on('data', (data: Buffer) => {
+        this.lineBuffer += data.toString();
+
+        // Process complete lines
+        let newlineIndex;
+        while ((newlineIndex = this.lineBuffer.indexOf('\n')) !== -1) {
+          const line = this.lineBuffer.slice(0, newlineIndex);
+          this.lineBuffer = this.lineBuffer.slice(newlineIndex + 1);
+
+          if (line.trim()) {
+            this.handleLine(line);
+          }
+        }
+      });
+
+      this.socket.on('error', (err) => {
+        this.emit('error', err);
+        if (!this.ready) reject(err);
+      });
+
+      this.socket.on('close', () => {
+        this.ready = false;
+        this.emit('exit', 0);
+      });
+
+      setTimeout(() => {
+        if (!this.ready) {
+          reject(new Error('Agent socket connection timeout'));
+        }
+      }, 10000);
+    });
+  }
+
+  /**
+   * Wait for socket file to exist
+   */
+  private waitForSocket(path: string, timeout: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        if (existsSync(path)) {
+          // Give the server a moment to start listening
+          setTimeout(resolve, 100);
+        } else if (Date.now() - start > timeout) {
+          reject(new Error('Timeout waiting for agent socket'));
+        } else {
+          setTimeout(check, 100);
+        }
+      };
+      check();
+    });
+  }
+
+  /**
+   * Start agent in stdio mode (legacy fallback)
+   */
+  private async startStdioMode(): Promise<void> {
     const binary = VifAgent.findBinary();
     if (!binary) {
       throw new Error('Vif Agent not found. Run "vif install-agent" to install.');
     }
 
     return new Promise((resolve, reject) => {
-      this.process = spawn(binary, [], {
+      const process = spawn(binary, [], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      this.rl = readline.createInterface({
-        input: this.process.stdout!,
+      const rl = readline.createInterface({
+        input: process.stdout!,
         crlfDelay: Infinity,
       });
 
-      this.rl.on('line', (line) => {
-        try {
-          const data = JSON.parse(line) as AgentResponse;
+      rl.on('line', (line) => this.handleLine(line));
 
-          if (data.event === 'ready') {
-            this.ready = true;
-            this.emit('ready');
-            resolve();
-          } else if (data.event) {
-            this.emit(data.event, data);
-          } else {
-            // Response to a command
-            const pending = this.queue.shift();
-            if (pending) {
-              if (data.ok) {
-                pending.resolve(data);
-              } else {
-                pending.reject(new Error(data.error || 'Unknown error'));
-              }
-            }
-          }
-        } catch {
-          // Ignore non-JSON output
-        }
-      });
-
-      // Log agent's stderr (debug output)
-      this.process.stderr?.on('data', (data: Buffer) => {
+      process.stderr?.on('data', (data: Buffer) => {
         const text = data.toString();
         for (const line of text.split('\n')) {
           if (line.trim()) {
@@ -109,19 +210,30 @@ export class VifAgent extends EventEmitter {
         }
       });
 
-      this.process.on('error', (err) => {
+      process.on('error', (err) => {
         this.emit('error', err);
         reject(err);
       });
 
-      this.process.on('exit', (code) => {
+      process.on('exit', (code) => {
         this.ready = false;
         this.emit('exit', code);
       });
 
-      // Timeout for startup
+      // Store process for sending commands
+      (this as any)._process = process;
+
+      // Wait for ready event
+      const onReady = () => {
+        this.ready = true;
+        this.emit('ready');
+        resolve();
+      };
+      this.once('ready', onReady);
+
       setTimeout(() => {
         if (!this.ready) {
+          this.off('ready', onReady);
           reject(new Error('Agent startup timeout'));
         }
       }, 10000);
@@ -129,16 +241,48 @@ export class VifAgent extends EventEmitter {
   }
 
   /**
+   * Handle a line of JSON from the agent
+   */
+  private handleLine(line: string): void {
+    try {
+      const data = JSON.parse(line) as AgentResponse;
+
+      if (data.event === 'ready') {
+        this.ready = true;
+        this.emit('ready');
+      } else if (data.event) {
+        this.emit(data.event, data);
+      } else {
+        // Response to a command
+        const pending = this.queue.shift();
+        if (pending) {
+          if (data.ok) {
+            pending.resolve(data);
+          } else {
+            pending.reject(new Error(data.error || 'Unknown error'));
+          }
+        }
+      }
+    } catch {
+      // Ignore non-JSON output
+    }
+  }
+
+  /**
    * Stop the agent
    */
   stop(): void {
-    if (this.process) {
-      this.send({ action: 'quit' }).catch(() => {});
-      setTimeout(() => {
-        this.process?.kill();
-        this.process = null;
-      }, 100);
-    }
+    this.send({ action: 'quit' }).catch(() => {});
+    setTimeout(() => {
+      if (this.socket) {
+        this.socket.destroy();
+        this.socket = null;
+      }
+      if ((this as any)._process) {
+        (this as any)._process.kill();
+        (this as any)._process = null;
+      }
+    }, 100);
   }
 
   /**
@@ -146,12 +290,21 @@ export class VifAgent extends EventEmitter {
    */
   private send(cmd: Record<string, unknown>): Promise<AgentResponse> {
     return new Promise((resolve, reject) => {
-      if (!this.process || !this.ready) {
+      if (!this.ready) {
         return reject(new Error('Agent not running'));
       }
 
       this.queue.push({ resolve, reject });
-      this.process.stdin!.write(JSON.stringify(cmd) + '\n');
+      const message = JSON.stringify(cmd) + '\n';
+
+      if (this.socket) {
+        this.socket.write(message);
+      } else if ((this as any)._process) {
+        (this as any)._process.stdin!.write(message);
+      } else {
+        this.queue.pop();
+        reject(new Error('No connection to agent'));
+      }
     });
   }
 
@@ -337,6 +490,28 @@ export class VifAgent extends EventEmitter {
 
   async panelHeadless(enabled: boolean): Promise<void> {
     await this.send({ action: 'panel.headless', enabled });
+  }
+
+  // ─── Timeline Panel Commands ────────────────────────────────────────
+
+  async timelineShow(): Promise<void> {
+    await this.send({ action: 'timeline.show' });
+  }
+
+  async timelineHide(): Promise<void> {
+    await this.send({ action: 'timeline.hide' });
+  }
+
+  async timelineScene(yaml: string): Promise<void> {
+    await this.send({ action: 'timeline.scene', yaml });
+  }
+
+  async timelineStep(index: number): Promise<void> {
+    await this.send({ action: 'timeline.step', index });
+  }
+
+  async timelineReset(): Promise<void> {
+    await this.send({ action: 'timeline.reset' });
   }
 }
 

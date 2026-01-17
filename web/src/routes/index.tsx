@@ -1,7 +1,35 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { vifClient } from '@/lib/vif-client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { TimelineOverlay } from '@/components/TimelineOverlay'
+
+// Sample scene for timeline preview
+const SAMPLE_SCENE_YAML = `
+scene:
+  name: Demo Scene
+  mode: draft
+
+sequence:
+  - label: teleprompter
+    text: "Welcome to the demo"
+  - wait: 1s
+  - cursor.show: {}
+  - click: sidebar.home
+  - wait: 500ms
+  - navigate:
+      through: sidebar
+      items: [home, drafts, settings]
+      wait: 400ms
+  - label.update: "Navigating through items..."
+  - wait: 800ms
+  - click: content.center
+  - record: start
+  - wait: 2s
+  - record: stop
+  - cursor.hide: {}
+  - label.hide: {}
+`
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
@@ -203,6 +231,207 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Timeline Overlay Preview */}
+      <TimelinePreview />
+
+      {/* Timeline Panel (Native Overlay) */}
+      <div className="glass-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-vif-accent">◧</span>
+            <h2 className="font-semibold">Timeline Panel</h2>
+            <span className="text-xs text-neutral-500">Native Overlay</span>
+          </div>
+        </div>
+        <p className="text-sm text-neutral-500">
+          Show the timeline as a real overlay on screen (via vif-agent WKWebView)
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <ControlButton
+            onClick={() => {
+              vifClient.send('timeline.show', {})
+              vifClient.send('timeline.scene', { yaml: SAMPLE_SCENE_YAML })
+            }}
+            icon="◧"
+            label="Show Panel"
+            variant="primary"
+          />
+          <ControlButton
+            onClick={() => vifClient.send('timeline.hide', {})}
+            icon="✕"
+            label="Hide Panel"
+          />
+          <ControlButton
+            onClick={() => vifClient.send('timeline.reset', {})}
+            icon="↺"
+            label="Reset"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              // Show panel and load scene first
+              await vifClient.send('timeline.show', {})
+              await vifClient.send('timeline.scene', { yaml: SAMPLE_SCENE_YAML })
+
+              // Simulate stepping through (14 steps in sample)
+              let step = 0
+              const interval = setInterval(async () => {
+                await vifClient.send('timeline.setstep', { index: step })
+                step++
+                if (step >= 14) {
+                  clearInterval(interval)
+                }
+              }, 600)
+            }}
+            className="flex-1 px-3 py-2 bg-vif-success/10 text-vif-success border border-vif-success/30 rounded-lg text-sm font-medium hover:bg-vif-success/20 transition-all"
+          >
+            ▶ Simulate Playback
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TimelinePreview() {
+  const [currentStep, setCurrentStep] = useState(-1)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [stepCount, setStepCount] = useState(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Count steps in sample scene
+  useEffect(() => {
+    const matches = SAMPLE_SCENE_YAML.match(/^\s+-\s/gm)
+    setStepCount(matches?.length || 0)
+  }, [])
+
+  // Auto-play logic
+  useEffect(() => {
+    if (isPlaying) {
+      intervalRef.current = setInterval(() => {
+        setCurrentStep(prev => {
+          if (prev >= stepCount - 1) {
+            setIsPlaying(false)
+            return -1 // Reset to beginning
+          }
+          return prev + 1
+        })
+      }, 800)
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [isPlaying, stepCount])
+
+  const handlePlay = () => {
+    if (currentStep === -1) setCurrentStep(0)
+    setIsPlaying(true)
+  }
+
+  const handlePause = () => {
+    setIsPlaying(false)
+  }
+
+  const handleReset = () => {
+    setIsPlaying(false)
+    setCurrentStep(-1)
+  }
+
+  const handleStep = () => {
+    setCurrentStep(prev => {
+      if (prev >= stepCount - 1) return -1
+      return prev + 1
+    })
+  }
+
+  const handlePrevStep = () => {
+    setCurrentStep(prev => {
+      if (prev <= 0) return -1
+      return prev - 1
+    })
+  }
+
+  return (
+    <div className="glass-card overflow-hidden">
+      <div className="px-5 py-4 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-vif-accent">◧</span>
+          <h2 className="font-semibold">Timeline Overlay</h2>
+          <span className="text-xs text-neutral-500 ml-2">Component Preview</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Playback controls */}
+          <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+            <button
+              onClick={handlePrevStep}
+              disabled={currentStep <= 0 && currentStep !== -1}
+              className="w-8 h-8 rounded flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              title="Previous step"
+            >
+              ⏮
+            </button>
+            {isPlaying ? (
+              <button
+                onClick={handlePause}
+                className="w-8 h-8 rounded flex items-center justify-center text-vif-warning hover:bg-white/10 transition-all"
+                title="Pause"
+              >
+                ⏸
+              </button>
+            ) : (
+              <button
+                onClick={handlePlay}
+                className="w-8 h-8 rounded flex items-center justify-center text-vif-success hover:bg-white/10 transition-all"
+                title="Play"
+              >
+                ▶
+              </button>
+            )}
+            <button
+              onClick={handleStep}
+              className="w-8 h-8 rounded flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-all"
+              title="Next step"
+            >
+              ⏭
+            </button>
+            <button
+              onClick={handleReset}
+              className="w-8 h-8 rounded flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-all"
+              title="Reset"
+            >
+              ↺
+            </button>
+          </div>
+          {/* Step indicator */}
+          <div className="text-xs text-neutral-500 font-mono min-w-[60px] text-right">
+            {currentStep >= 0 ? `${currentStep + 1}/${stepCount}` : `0/${stepCount}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Timeline preview */}
+      <div className="flex">
+        <div className="w-[280px] border-r border-white/[0.06]">
+          <TimelineOverlay sceneYaml={SAMPLE_SCENE_YAML} currentStep={currentStep} />
+        </div>
+        <div className="flex-1 p-6 bg-gradient-to-br from-white/[0.02] to-transparent">
+          <div className="text-center text-neutral-500">
+            <div className="text-4xl mb-3 opacity-30">🎬</div>
+            <p className="text-sm">App preview area</p>
+            <p className="text-xs mt-1 opacity-60">Timeline would appear alongside your app during recording</p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -232,13 +461,36 @@ function StatusCard({
     neutral: 'from-neutral-500/10',
   }
 
+  const glowColors = {
+    success: 'shadow-[0_0_20px_-5px_rgba(34,197,94,0.5)]',
+    error: 'shadow-[0_0_20px_-5px_rgba(239,68,68,0.5)]',
+    warning: 'shadow-[0_0_20px_-5px_rgba(234,179,8,0.5)]',
+    neutral: '',
+  }
+
+  const dotColors = {
+    success: 'bg-vif-success',
+    error: 'bg-vif-danger',
+    warning: 'bg-vif-warning',
+    neutral: 'bg-neutral-500',
+  }
+
   return (
-    <div className={`glass-card p-4 bg-gradient-to-br ${bgColors[status]} to-transparent`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-lg ${statusColors[status]}`}>{icon}</span>
+    <div className={`glass-card p-4 bg-gradient-to-br ${bgColors[status]} to-transparent ${status !== 'neutral' ? glowColors[status] : ''} transition-shadow duration-500`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          {/* Animated status dot */}
+          <div className="relative">
+            <div className={`w-2.5 h-2.5 rounded-full ${dotColors[status]}`} />
+            {status !== 'neutral' && (
+              <div className={`absolute inset-0 w-2.5 h-2.5 rounded-full ${dotColors[status]} animate-ping opacity-75`} />
+            )}
+          </div>
+          <span className={`text-sm font-medium ${statusColors[status]}`}>{icon}</span>
+        </div>
       </div>
-      <p className={`text-2xl font-semibold ${statusColors[status]}`}>{value}</p>
-      <p className="text-sm text-neutral-500 mt-1">{label}</p>
+      <p className={`text-2xl font-bold tracking-tight ${statusColors[status]}`}>{value}</p>
+      <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">{label}</p>
     </div>
   )
 }
