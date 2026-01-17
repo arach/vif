@@ -2,6 +2,27 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import {
+  Card,
+  Button,
+  Badge,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui'
+import {
+  Play,
+  FolderOpen,
+  Download,
+  Trash2,
+  Video,
+  HardDrive,
+  Clock,
+  Film,
+  ArrowRight,
+  Radio,
+} from 'lucide-react'
 
 export const Route = createFileRoute('/videos')({
   component: Videos,
@@ -68,139 +89,172 @@ function Videos() {
   const totalSize = videos.reduce((sum, v) => sum + v.size, 0)
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold gradient-text">Videos</h1>
-          <p className="text-neutral-500 mt-1">Browse and preview your recorded videos</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-sm text-neutral-400">
-              {videos.length} video{videos.length !== 1 ? 's' : ''}
-            </div>
-            <div className="text-xs text-neutral-600">
-              {formatSize(totalSize)} total
-            </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">Videos</h1>
+            <p className="text-muted-foreground mt-1">Browse and preview your recorded videos</p>
           </div>
-          {videosData?.dir && (
-            <button
-              onClick={() => {
-                // Open folder in Finder
-                vifClient.send('shell.open', { path: videosData.dir })
-              }}
-              className="px-3 py-1.5 bg-white/5 text-neutral-400 rounded-lg text-sm hover:bg-white/10 hover:text-white transition-all"
-              title={videosData.dir}
-            >
-              Open Folder
-            </button>
-          )}
-        </div>
-      </div>
-
-      {!connected ? (
-        <div className="glass-card p-12 text-center">
-          <p className="text-neutral-400">Connect to vif server to view videos</p>
-        </div>
-      ) : isLoading ? (
-        <div className="glass-card p-12 text-center">
-          <p className="text-neutral-400">Loading videos...</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-5 gap-6">
-          {/* Video List */}
-          <div className="col-span-2 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-2">
-            {videos.map((video) => (
-              <VideoCard
-                key={video.name}
-                video={video}
-                selected={selectedVideo === video.name}
-                onSelect={() => setSelectedVideo(video.name)}
-                formatSize={formatSize}
-                formatDate={formatDate}
-              />
-            ))}
-            {videos.length === 0 && (
-              <div className="glass-card p-8 text-center">
-                <p className="text-neutral-500">No videos yet</p>
-                <p className="text-sm text-neutral-600 mt-1">Run a scene to create your first recording</p>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <Badge variant="glass" className="mb-1">
+                <Video className="w-3 h-3 mr-1" />
+                {videos.length} video{videos.length !== 1 ? 's' : ''}
+              </Badge>
+              <div className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
+                <HardDrive className="w-3 h-3" />
+                {formatSize(totalSize)} total
               </div>
+            </div>
+            {videosData?.dir && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="glass"
+                    size="sm"
+                    onClick={() => {
+                      vifClient.send('shell.open', { path: videosData.dir })
+                    }}
+                  >
+                    <FolderOpen className="w-4 h-4 mr-2" />
+                    Open Folder
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{videosData.dir}</TooltipContent>
+              </Tooltip>
             )}
           </div>
+        </div>
 
-          {/* Video Player */}
-          <div className="col-span-3">
-            {selectedVideo ? (
-              <div className="glass-card overflow-hidden sticky top-8">
-                <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-vif-accent">▶</span>
-                    <code className="text-sm font-mono text-neutral-300">{selectedVideo}</code>
+        {!connected ? (
+          <Card variant="glass" className="p-12 text-center">
+            <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+            <p className="text-muted-foreground">Connect to vif server to view videos</p>
+          </Card>
+        ) : isLoading ? (
+          <Card variant="glass" className="p-12 text-center">
+            <div className="w-8 h-8 mx-auto mb-3 border-2 border-vif-accent/30 border-t-vif-accent rounded-full animate-spin" />
+            <p className="text-muted-foreground">Loading videos...</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-5 gap-6">
+            {/* Video List */}
+            <div className="col-span-2 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-2">
+              {videos.map((video) => (
+                <VideoCard
+                  key={video.name}
+                  video={video}
+                  selected={selectedVideo === video.name}
+                  onSelect={() => setSelectedVideo(video.name)}
+                  formatSize={formatSize}
+                  formatDate={formatDate}
+                />
+              ))}
+              {videos.length === 0 && (
+                <Card variant="glass" className="p-8 text-center">
+                  <Film className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                  <p className="text-muted-foreground">No videos yet</p>
+                  <p className="text-sm text-muted-foreground/60 mt-1">Run a scene to create your first recording</p>
+                </Card>
+              )}
+            </div>
+
+            {/* Video Player */}
+            <div className="col-span-3">
+              {selectedVideo ? (
+                <Card variant="glass" className="overflow-hidden sticky top-8">
+                  <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Play className="w-4 h-4 text-vif-accent" />
+                      <code className="text-sm font-mono text-neutral-300">{selectedVideo}</code>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="glass"
+                            size="sm"
+                            onClick={() => {
+                              const link = document.createElement('a')
+                              link.href = `http://localhost:7852/videos/${encodeURIComponent(selectedVideo)}`
+                              link.download = selectedVideo
+                              link.click()
+                            }}
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Download video file</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="glass-danger"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm(`Delete ${selectedVideo}?`)) {
+                                deleteMutation.mutate(selectedVideo)
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Delete video</TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const link = document.createElement('a')
-                        link.href = `http://localhost:7852/videos/${encodeURIComponent(selectedVideo)}`
-                        link.download = selectedVideo
-                        link.click()
-                      }}
-                      className="px-3 py-1.5 bg-white/5 text-neutral-300 rounded text-sm font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5"
-                    >
-                      <span>↓</span> Download
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete ${selectedVideo}?`)) {
-                          deleteMutation.mutate(selectedVideo)
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                      className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded text-sm font-medium hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                    >
-                      Delete
-                    </button>
+                  <div className="bg-black">
+                    <VideoPlayer videoName={selectedVideo} />
                   </div>
-                </div>
-                <div className="bg-black">
-                  <VideoPlayer videoName={selectedVideo} />
-                </div>
-                <div className="px-4 py-3 border-t border-white/[0.06] bg-white/[0.02]">
-                  {(() => {
-                    const video = videos.find(v => v.name === selectedVideo)
-                    if (!video) return null
-                    return (
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-4">
-                          <span className="text-neutral-400">{formatSize(video.size)}</span>
-                          <span className="text-neutral-600">•</span>
-                          <span className="text-neutral-500">{formatDate(video.modified)}</span>
+                  <div className="px-4 py-3 border-t border-white/[0.06] bg-white/[0.02]">
+                    {(() => {
+                      const video = videos.find(v => v.name === selectedVideo)
+                      if (!video) return null
+                      return (
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="secondary" className="gap-1">
+                              <HardDrive className="w-3 h-3" />
+                              {formatSize(video.size)}
+                            </Badge>
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(video.modified)}
+                            </span>
+                          </div>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="text-vif-accent"
+                            onClick={() => {
+                              window.location.href = `/recordings?video=${encodeURIComponent(selectedVideo)}`
+                            }}
+                          >
+                            Open in Post-Production
+                            <ArrowRight className="w-4 h-4 ml-1" />
+                          </Button>
                         </div>
-                        <button
-                          onClick={() => {
-                            // Navigate to post-production with this video
-                            window.location.href = `/recordings?video=${encodeURIComponent(selectedVideo)}`
-                          }}
-                          className="text-vif-accent text-sm hover:text-vif-accent-bright transition-colors"
-                        >
-                          Open in Post-Production →
-                        </button>
-                      </div>
-                    )
-                  })()}
-                </div>
-              </div>
-            ) : (
-              <div className="glass-card p-12 text-center sticky top-8">
-                <p className="text-neutral-500">Select a video to preview</p>
-                <p className="text-xs text-neutral-600 mt-2">Videos are stored in ~/.vif</p>
-              </div>
-            )}
+                      )
+                    })()}
+                  </div>
+                </Card>
+              ) : (
+                <Card variant="glass" className="p-12 text-center sticky top-8">
+                  <Film className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                  <p className="text-muted-foreground">Select a video to preview</p>
+                  <p className="text-xs text-muted-foreground/60 mt-2">Videos are stored in ~/.vif</p>
+                </Card>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }
 
@@ -221,43 +275,48 @@ function VideoCard({
   const isFinal = video.name.includes('final')
 
   return (
-    <div
+    <Card
+      variant={selected ? "glass" : "glass-interactive"}
       onClick={onSelect}
-      className={`
-        glass-card p-4 cursor-pointer transition-all duration-200
-        ${selected
+      className={`p-4 cursor-pointer ${
+        selected
           ? 'border-vif-accent/50 shadow-glow-sm bg-gradient-to-br from-vif-accent/10 to-transparent'
-          : 'hover:border-white/20 hover:bg-white/[0.02]'
-        }
-      `}
+          : ''
+      }`}
     >
       <div className="flex items-start gap-3">
         {/* Thumbnail placeholder */}
-        <div className="w-16 h-10 rounded bg-neutral-800 flex items-center justify-center flex-shrink-0">
-          <span className="text-neutral-600 text-lg">▶</span>
+        <div className="w-16 h-10 rounded bg-neutral-800 flex items-center justify-center flex-shrink-0 border border-white/[0.06]">
+          <Play className="w-4 h-4 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="font-medium truncate flex items-center gap-2">
             {video.name.replace('.mp4', '')}
             {isDraft && (
-              <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">
+              <Badge variant="glass-warning" className="text-[10px] py-0">
                 Draft
-              </span>
+              </Badge>
             )}
             {isFinal && !isDraft && (
-              <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+              <Badge variant="glass-success" className="text-[10px] py-0">
                 Final
-              </span>
+              </Badge>
             )}
           </h3>
-          <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
-            <span>{formatSize(video.size)}</span>
+          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <HardDrive className="w-3 h-3" />
+              {formatSize(video.size)}
+            </span>
             <span>•</span>
-            <span>{formatDate(video.modified)}</span>
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDate(video.modified)}
+            </span>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -278,8 +337,9 @@ function VideoPlayer({ videoName }: { videoName: string }) {
     return (
       <div className="aspect-video flex items-center justify-center bg-neutral-900">
         <div className="text-center">
-          <p className="text-neutral-500">Failed to load video</p>
-          <p className="text-xs text-neutral-600 mt-1">Check if the HTTP server is running on port 7852</p>
+          <Video className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+          <p className="text-muted-foreground">Failed to load video</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Check if the HTTP server is running on port 7852</p>
         </div>
       </div>
     )

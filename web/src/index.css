@@ -3,17 +3,50 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 5% 14%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 5% 14%;
+    --muted-foreground: 240 5% 55%;
+    --accent: 240 5% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 12%;
+    --input: 240 5% 12%;
+    --ring: 239 84% 67%;
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
   body {
+    @apply bg-background text-foreground;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #09090b;
   }
 
-  /* Nice scrollbars */
+  /* Prevent layout shift from scrollbar */
+  html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
+
+  /* Scrollbars - subtle */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
@@ -21,73 +54,103 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #3f3f46;
-    border-radius: 4px;
+    background: #27272a;
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #52525b;
+    background: #3f3f46;
   }
 }
 
 @layer components {
-  /* Glass morphism card */
+  /* Matte card - solid, clean */
   .glass-card {
-    @apply bg-gradient-to-b from-white/[0.08] to-white/[0.02]
-           backdrop-blur-xl
-           border border-white/[0.08]
-           rounded-xl;
-    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+    @apply bg-zinc-900 border border-zinc-800 rounded-lg transition-colors duration-150;
   }
 
-  /* Subtle glow button */
-  .glow-button {
-    @apply relative overflow-hidden transition-all duration-300;
+  .glass-card:hover {
+    @apply border-zinc-700;
   }
 
-  .glow-button::before {
-    content: '';
-    @apply absolute inset-0 bg-gradient-to-r from-vif-accent/20 to-purple-500/20
-           opacity-0 transition-opacity duration-300;
+  /* Surface - slightly transparent */
+  .glass-surface {
+    @apply bg-zinc-900/60 border border-zinc-800/80 rounded-lg;
   }
 
-  .glow-button:hover::before {
-    @apply opacity-100;
+  /* Panel - for overlays and modals */
+  .glass-panel {
+    @apply bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl;
   }
 
-  .glow-button:hover {
-    box-shadow: 0 0 15px -3px rgb(99 102 241 / 0.3);
+  /* Interactive element */
+  .glass-interactive {
+    @apply bg-zinc-900/80 border border-zinc-800 rounded-lg
+           transition-colors duration-150
+           hover:bg-zinc-800 hover:border-zinc-700
+           cursor-pointer;
   }
 
-  /* Status dot with glow */
+  .glass-interactive:active {
+    @apply bg-zinc-800/80;
+  }
+
+  /* ============================================
+     Subtle Glass Accents - Fine Details
+     ============================================ */
+
+  /* Top highlight - subtle 1px light crease */
+  .glass-highlight {
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Bottom crease - subtle 1px shadow line */
+  .glass-crease {
+    box-shadow: inset 0 -1px 0 0 rgba(0, 0, 0, 0.3);
+  }
+
+  /* Both top highlight and bottom crease */
+  .glass-bevel {
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.2);
+  }
+
+  /* Subtle separator - horizontal divider with depth */
+  .glass-divider {
+    @apply h-px bg-zinc-800;
+    box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.02);
+  }
+
+  /* Vertical divider */
+  .glass-divider-v {
+    @apply w-px bg-zinc-800;
+    box-shadow: 1px 0 0 0 rgba(255, 255, 255, 0.02);
+  }
+
+  /* Inset panel - recessed look */
+  .glass-inset {
+    @apply bg-zinc-950/50 rounded;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Status dot - static, no animation */
   .status-dot {
     @apply relative;
   }
-
-  .status-dot::after {
-    content: '';
-    @apply absolute inset-0 rounded-full animate-ping opacity-75;
-  }
-
-  .status-dot-success::after {
-    @apply bg-vif-success;
-  }
-
-  .status-dot-warning::after {
-    @apply bg-vif-warning;
-  }
-
-  .status-dot-danger::after {
-    @apply bg-vif-danger;
-  }
 }
 
-/* Gradient text */
+/* Gradient text - more subtle */
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-neutral-400;
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400;
 }
 
-/* Noise overlay for texture */
+/* Accent gradient text */
+.gradient-text-accent {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-vif-accent to-purple-400;
+}
+
+/* Noise overlay - very subtle */
 .noise-overlay {
   position: relative;
 }
@@ -97,7 +160,7 @@
   position: absolute;
   inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.03;
+  opacity: 0.015;
   pointer-events: none;
   border-radius: inherit;
 }
@@ -119,24 +182,24 @@
 .scene-diff pre {
   padding: 16px !important;
   margin: 0 !important;
-  background: rgba(0, 0, 0, 0.2) !important;
+  background: rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Line numbers styling */
 .code-view [data-line-number],
 .scene-diff [data-line-number] {
-  color: #6b7280 !important;
+  color: #52525b !important;
   padding-right: 16px !important;
   user-select: none;
 }
 
 /* Diff addition/deletion backgrounds */
 .scene-diff [data-diff-type="addition"] {
-  background: rgba(34, 197, 94, 0.1) !important;
+  background: rgba(34, 197, 94, 0.08) !important;
 }
 
 .scene-diff [data-diff-type="deletion"] {
-  background: rgba(239, 68, 68, 0.1) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
 }
 
 /* Scene Editor */
@@ -147,7 +210,7 @@
 .scene-editor pre {
   padding: 16px !important;
   margin: 0 !important;
-  background: rgba(0, 0, 0, 0.2) !important;
+  background: rgba(0, 0, 0, 0.3) !important;
 }
 
 .scene-editor-code {

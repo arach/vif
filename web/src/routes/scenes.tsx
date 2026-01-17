@@ -6,6 +6,26 @@ import { Timeline } from '@/components/Timeline'
 import { TimelineOverlay } from '@/components/TimelineOverlay'
 import { SceneDiff } from '@/components/SceneDiff'
 import { SceneEditor } from '@/components/SceneEditor'
+import {
+  Card,
+  Button,
+  Badge,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui'
+import {
+  Play,
+  Plus,
+  FileCode,
+  Clock,
+  FolderOpen,
+  AlertTriangle,
+  Radio,
+  GitCompare,
+  List,
+  Code,
+} from 'lucide-react'
 
 export const Route = createFileRoute('/scenes')({
   component: Scenes,
@@ -114,43 +134,48 @@ function Scenes() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold gradient-text">Scenes</h1>
-          <p className="text-neutral-500 mt-1">Browse and run your automation scenes</p>
+          <p className="text-muted-foreground mt-1">Browse and run your automation scenes</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-neutral-500">
+          <Badge variant="glass">
             {scenes.length} scene{scenes.length !== 1 ? 's' : ''}
-          </span>
-          <button
-            className="px-4 py-2 bg-white/5 text-neutral-500 rounded-lg text-sm font-medium border border-white/10 cursor-not-allowed"
-            title="Coming soon"
-            disabled
-          >
-            + New Scene
-          </button>
+          </Badge>
+          <Button variant="glass" size="sm" disabled title="Coming soon">
+            <Plus className="w-4 h-4 mr-2" />
+            New Scene
+          </Button>
         </div>
       </div>
 
       {/* Path indicator */}
       {scenesData?.dir && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-neutral-500 text-xs font-mono">DIR</span>
-          <code className="font-mono text-neutral-400 bg-white/5 px-2 py-1 rounded">
+          <Badge variant="secondary" className="gap-1">
+            <FolderOpen className="w-3 h-3" />
+            DIR
+          </Badge>
+          <code className="font-mono text-muted-foreground bg-white/[0.04] px-2 py-1 rounded border border-white/[0.06]">
             {scenesData.dir}
           </code>
           {scenesData.error && (
-            <span className="text-vif-warning">⚠ {scenesData.error}</span>
+            <Badge variant="glass-warning" className="gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              {scenesData.error}
+            </Badge>
           )}
         </div>
       )}
 
       {!connected ? (
-        <div className="glass-card p-12 text-center">
-                    <p className="text-neutral-400">Connect to vif agent to view scenes</p>
-        </div>
+        <Card variant="glass" className="p-12 text-center">
+          <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+          <p className="text-muted-foreground">Connect to vif agent to view scenes</p>
+        </Card>
       ) : isLoading ? (
-        <div className="glass-card p-12 text-center">
-                    <p className="text-neutral-400">Loading scenes...</p>
-        </div>
+        <Card variant="glass" className="p-12 text-center">
+          <div className="w-8 h-8 mx-auto mb-3 border-2 border-vif-accent/30 border-t-vif-accent rounded-full animate-spin" />
+          <p className="text-muted-foreground">Loading scenes...</p>
+        </Card>
       ) : (
         <div className="grid grid-cols-5 gap-6">
           {/* Scene List */}
@@ -166,79 +191,66 @@ function Scenes() {
               />
             ))}
             {scenes.length === 0 && (
-              <div className="glass-card p-8 text-center">
-                                <p className="text-neutral-500">No scenes found</p>
-                <p className="text-sm text-neutral-600 mt-1">Create a scene to get started</p>
-              </div>
+              <Card variant="glass" className="p-8 text-center">
+                <FileCode className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                <p className="text-muted-foreground">No scenes found</p>
+                <p className="text-sm text-muted-foreground/60 mt-1">Create a scene to get started</p>
+              </Card>
             )}
           </div>
 
           {/* Scene Preview */}
           <div className="col-span-3">
             {selectedPath ? (
-              <div className="glass-card overflow-hidden sticky top-8">
+              <Card variant="glass" className="overflow-hidden sticky top-8">
                 <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
                   <code className="text-sm font-mono text-neutral-300">{selectedPath}</code>
                   <div className="flex items-center gap-2">
                     {/* View toggle */}
-                    <div className="flex bg-white/5 rounded-lg p-0.5">
-                      <button
-                        onClick={() => setViewMode('timeline')}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-                          viewMode === 'timeline'
-                            ? 'bg-vif-accent text-white'
-                            : 'text-neutral-400 hover:text-white'
-                        }`}
-                      >
-                        Timeline
-                      </button>
-                      <button
-                        onClick={() => setViewMode('yaml')}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-                          viewMode === 'yaml'
-                            ? 'bg-vif-accent text-white'
-                            : 'text-neutral-400 hover:text-white'
-                        }`}
-                      >
-                        YAML
-                      </button>
-                      <button
-                        onClick={() => {
-                          // For demo, use the demo old yaml
-                          if (!previousContent && sceneContent?.content) {
-                            setPreviousContent(DEMO_OLD_YAML)
-                          }
-                          setViewMode('diff')
-                        }}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
-                          viewMode === 'diff'
-                            ? 'bg-purple-500 text-white'
-                            : 'text-neutral-400 hover:text-white'
-                        }`}
-                      >
-                        Diff
-                      </button>
-                      <button
-                        onClick={() => setViewMode('live')}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-all flex items-center gap-1 ${
-                          viewMode === 'live'
-                            ? 'bg-vif-danger text-white'
-                            : isSceneRunning
-                              ? 'text-vif-danger hover:text-white'
-                              : 'text-neutral-400 hover:text-white'
-                        }`}
-                      >
-                        {isSceneRunning && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
-                        Live
-                      </button>
-                    </div>
-                    <button
+                    <Tabs value={viewMode} onValueChange={(v) => {
+                      if (v === 'diff' && !previousContent && sceneContent?.content) {
+                        setPreviousContent(DEMO_OLD_YAML)
+                      }
+                      setViewMode(v as ViewMode)
+                    }}>
+                      <TabsList>
+                        <TabsTrigger value="timeline" className="gap-1.5">
+                          <List className="w-3 h-3" />
+                          Timeline
+                        </TabsTrigger>
+                        <TabsTrigger value="yaml" className="gap-1.5">
+                          <Code className="w-3 h-3" />
+                          YAML
+                        </TabsTrigger>
+                        <TabsTrigger value="diff" className="gap-1.5">
+                          <GitCompare className="w-3 h-3" />
+                          Diff
+                        </TabsTrigger>
+                        <TabsTrigger value="live" className="gap-1.5">
+                          {isSceneRunning && <span className="w-1.5 h-1.5 rounded-full bg-vif-danger animate-pulse" />}
+                          <Radio className="w-3 h-3" />
+                          Live
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    <Button
+                      variant={isSceneRunning ? "outline" : "glass-primary"}
+                      size="sm"
                       onClick={() => runSceneMutation.mutate(selectedPath)}
                       disabled={runSceneMutation.isPending || isSceneRunning}
-                      className="px-3 py-1.5 bg-vif-accent text-white rounded text-sm font-medium hover:bg-vif-accent-bright transition-colors disabled:opacity-50"
                     >
-                      {isSceneRunning ? '● Running' : '▶ Run'}
-                    </button>
+                      {isSceneRunning ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-vif-danger animate-pulse mr-2" />
+                          Running
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          Run
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
                 <div className="overflow-auto max-h-[70vh]">
@@ -247,8 +259,9 @@ function Scenes() {
                       <TimelineOverlay sceneYaml={liveYaml} currentStep={liveStep} />
                     ) : (
                       <div className="p-8 text-center">
-                                                <p className="text-neutral-500">Run a scene to see live timeline</p>
-                        <p className="text-xs text-neutral-600 mt-2">The timeline will appear here when a scene starts</p>
+                        <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                        <p className="text-muted-foreground">Run a scene to see live timeline</p>
+                        <p className="text-xs text-muted-foreground/60 mt-2">The timeline will appear here when a scene starts</p>
                       </div>
                     )
                   ) : viewMode === 'diff' ? (
@@ -259,13 +272,11 @@ function Scenes() {
                           newYaml={sceneContent.content}
                           sceneName={selectedPath || 'scene.yaml'}
                           onAccept={(newYaml) => {
-                            // TODO: Save the accepted changes
                             console.log('Accepted:', newYaml)
                             setPreviousContent(null)
                             setViewMode('timeline')
                           }}
                           onReject={() => {
-                            // TODO: Revert to previous
                             console.log('Rejected changes')
                             setPreviousContent(null)
                             setViewMode('yaml')
@@ -274,8 +285,9 @@ function Scenes() {
                       </div>
                     ) : (
                       <div className="p-8 text-center">
-                                                <p className="text-neutral-500">No changes to review</p>
-                        <p className="text-xs text-neutral-600 mt-2">
+                        <GitCompare className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                        <p className="text-muted-foreground">No changes to review</p>
+                        <p className="text-xs text-muted-foreground/60 mt-2">
                           When an agent modifies this scene, the diff will appear here
                         </p>
                       </div>
@@ -284,7 +296,7 @@ function Scenes() {
                     sceneContent?.content ? (
                       <Timeline content={sceneContent.content} />
                     ) : (
-                      <div className="p-6 text-center text-neutral-500">Loading...</div>
+                      <div className="p-6 text-center text-muted-foreground">Loading...</div>
                     )
                   ) : (
                     sceneContent?.content ? (
@@ -294,13 +306,13 @@ function Scenes() {
                         showValidation={true}
                       />
                     ) : (
-                      <div className="p-6 text-center text-neutral-500">Loading...</div>
+                      <div className="p-6 text-center text-muted-foreground">Loading...</div>
                     )
                   )}
                 </div>
-              </div>
+              </Card>
             ) : isSceneRunning || liveYaml ? (
-              <div className="glass-card overflow-hidden sticky top-8">
+              <Card variant="glass" className="overflow-hidden sticky top-8">
                 <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-vif-danger animate-pulse" />
@@ -310,11 +322,12 @@ function Scenes() {
                 <div className="overflow-auto max-h-[70vh]">
                   <TimelineOverlay sceneYaml={liveYaml} currentStep={liveStep} />
                 </div>
-              </div>
+              </Card>
             ) : (
-              <div className="glass-card p-12 text-center sticky top-8">
-                                <p className="text-neutral-500">Select a scene to preview</p>
-              </div>
+              <Card variant="glass" className="p-12 text-center sticky top-8">
+                <FileCode className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                <p className="text-muted-foreground">Select a scene to preview</p>
+              </Card>
             )}
           </div>
         </div>
@@ -340,42 +353,39 @@ function SceneCard({
   const timeAgo = getTimeAgo(modified)
 
   return (
-    <div
+    <Card
+      variant={selected ? "glass" : "glass-interactive"}
       onClick={onSelect}
-      className={`
-        glass-card p-4 cursor-pointer transition-all duration-200
-        ${selected
+      className={`p-4 cursor-pointer ${
+        selected
           ? 'border-vif-accent/50 shadow-glow-sm bg-gradient-to-br from-vif-accent/10 to-transparent'
-          : 'hover:border-white/20 hover:bg-white/[0.02]'
-        }
-      `}
+          : ''
+      }`}
     >
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="font-medium truncate flex items-center gap-2">
-            <span className="text-vif-accent opacity-60">▶</span>
+            <Play className="w-4 h-4 text-vif-accent opacity-60" />
             {scene.name.replace('.yaml', '')}
           </h3>
-          <p className="text-sm text-neutral-500 mt-1">{timeAgo}</p>
+          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {timeAgo}
+          </p>
         </div>
-        <button
+        <Button
+          variant="glass-primary"
+          size="sm"
           onClick={(e) => {
             e.stopPropagation()
             onRun()
           }}
           disabled={isRunning}
-          className={`
-            ml-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-            ${isRunning
-              ? 'bg-neutral-700 text-neutral-400 cursor-not-allowed'
-              : 'bg-vif-accent/20 text-vif-accent border border-vif-accent/30 hover:bg-vif-accent/30'
-            }
-          `}
         >
           {isRunning ? '...' : 'Run'}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   )
 }
 

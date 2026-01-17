@@ -1,8 +1,24 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { vifClient } from '@/lib/vif-client'
 import { useEffect, useState, useRef } from 'react'
 import { TimelineOverlay } from '@/components/TimelineOverlay'
+import { Button, TooltipProvider } from '@/components/ui'
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  RotateCcw,
+  Layers,
+  Monitor,
+  Film,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Volume2,
+  Video,
+} from 'lucide-react'
 
 // Sample scene for timeline preview
 const SAMPLE_SCENE_YAML = `
@@ -67,228 +83,127 @@ function Dashboard() {
     return `${seconds}s`
   }
 
+  const [showControls, setShowControls] = useState(false)
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold gradient-text">Dashboard</h1>
-        <p className="text-neutral-500 mt-1">Monitor and control your vif automation server</p>
-      </div>
-
-      {/* Status Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatusCard
-          label="Connection"
-          value={connected ? 'Online' : 'Offline'}
-          status={connected ? 'success' : 'error'}
-          icon="●"
-        />
-        <StatusCard
-          label="Agent"
-          value={status?.agent ? 'Active' : 'Inactive'}
-          status={status?.agent ? 'success' : 'neutral'}
-          icon="◆"
-        />
-        <StatusCard
-          label="Scene"
-          value={status?.scene ? 'Running' : 'Idle'}
-          status={status?.scene ? 'warning' : 'neutral'}
-          icon="▶"
-        />
-        <StatusCard
-          label="Uptime"
-          value={status ? formatUptime(status.uptime) : '—'}
-          status="neutral"
-          icon="◷"
-        />
-      </div>
-
-      {/* Server Control Bar */}
-      {connected && (
-        <div className="glass-card p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-vif-accent/20 to-purple-500/20 flex items-center justify-center border border-white/10">
-                <span className="text-vif-accent font-bold text-sm">V</span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-white">Server Control</p>
-                <p className="text-xs font-mono text-neutral-500 truncate max-w-md">
-                  {status?.cwd || 'Loading...'}
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  if (confirm('Restart the vif server?')) {
-                    vifClient.send('restart')
-                  }
-                }}
-                className="glow-button px-4 py-2 bg-vif-warning/10 text-vif-warning border border-vif-warning/20 rounded-lg text-sm font-medium hover:bg-vif-warning/20 transition-all"
-              >
-                ↻ Restart
-              </button>
-              <button
-                onClick={() => {
-                  if (confirm('Quit the vif server?')) {
-                    vifClient.send('quit')
-                  }
-                }}
-                className="px-4 py-2 bg-vif-danger/10 text-vif-danger border border-vif-danger/20 rounded-lg text-sm font-medium hover:bg-vif-danger/20 transition-all"
-              >
-                ⏻ Quit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Running Scene Banner */}
-      {status?.scene && (
-        <div className="glass-card p-4 border-vif-warning/30 bg-gradient-to-r from-vif-warning/5 to-transparent">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-vif-warning/20 flex items-center justify-center">
-                <span className="text-vif-warning animate-pulse">▶</span>
-              </div>
-              <div>
-                <p className="font-medium text-vif-warning">Scene Running</p>
-                <p className="text-sm text-neutral-400">{status.scene.name}</p>
-              </div>
-            </div>
-            <div className="text-sm text-neutral-400">
-              {formatUptime(Date.now() - status.scene.startTime)} elapsed
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Control Sections */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Stage Controls */}
-        <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-vif-accent">◐</span>
-            <h2 className="font-semibold">Stage Controls</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <ControlButton onClick={() => vifClient.send('cursor.show', {})} icon="↖" label="Show Cursor" />
-            <ControlButton onClick={() => vifClient.send('cursor.hide', {})} icon="↗" label="Hide Cursor" />
-            <ControlButton onClick={() => vifClient.send('backdrop.show', {})} icon="▣" label="Show Backdrop" />
-            <ControlButton onClick={() => vifClient.send('backdrop.hide', {})} icon="▢" label="Hide Backdrop" />
-            <ControlButton onClick={() => vifClient.send('stage.clear', {})} icon="✕" label="Clear Stage" variant="danger" />
-          </div>
-        </div>
-
-        {/* Recording Controls */}
-        <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-vif-danger">●</span>
-            <h2 className="font-semibold">Recording</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <ControlButton
-              onClick={() => vifClient.send('record.start', { mode: 'draft' })}
-              icon="●"
-              label="Start Draft"
-              variant="primary"
-            />
-            <ControlButton
-              onClick={() => vifClient.send('record.stop', {})}
-              icon="■"
-              label="Stop"
-              variant="danger"
-            />
-            <ControlButton onClick={() => vifClient.send('record.indicator', { show: true })} icon="◉" label="Show Indicator" />
-            <ControlButton onClick={() => vifClient.send('record.indicator', { show: false })} icon="○" label="Hide Indicator" />
-          </div>
-        </div>
-
-        {/* Label Controls */}
-        <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-purple-400">◈</span>
-            <h2 className="font-semibold">Labels</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <ControlButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'top' })} icon="▲" label="Label Top" />
-            <ControlButton onClick={() => vifClient.send('label.show', { text: 'Hello World', position: 'bottom' })} icon="▼" label="Label Bottom" />
-            <ControlButton onClick={() => vifClient.send('label.hide', {})} icon="✕" label="Hide Label" />
-          </div>
-        </div>
-
-        {/* Keys Controls */}
-        <div className="glass-card p-5 space-y-4">
-          <h2 className="font-semibold">Keys Overlay</h2>
-          <div className="grid grid-cols-2 gap-2">
-            <ControlButton onClick={() => vifClient.send('keys.show', { keys: ['cmd', 'shift', 'p'] })} icon="⌘" label="Cmd+Shift+P" />
-            <ControlButton onClick={() => vifClient.send('keys.show', { keys: ['cmd', 's'] })} icon="⌘" label="Cmd+S" />
-            <ControlButton onClick={() => vifClient.send('keys.hide', {})} icon="✕" label="Hide Keys" />
-          </div>
-        </div>
-      </div>
-
-      {/* Timeline Overlay Preview */}
-      <TimelinePreview />
-
-      {/* Timeline Panel (Native Overlay) */}
-      <div className="glass-card p-5 space-y-4">
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-6">
+        {/* Compact Header with Status */}
         <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-white">vif</h1>
+            <p className="text-xs text-zinc-500">Declarative demo automation</p>
+          </div>
           <div className="flex items-center gap-2">
-            <span className="text-vif-accent">◧</span>
-            <h2 className="font-semibold">Timeline Panel</h2>
-            <span className="text-xs text-neutral-500">Native Overlay</span>
+            <StatusPill status={connected ? 'success' : 'error'} label={connected ? 'Online' : 'Offline'} />
+            {status?.agent && <StatusPill status="success" label="Agent" />}
+            {status?.scene && <StatusPill status="warning" label="Recording" />}
           </div>
         </div>
-        <p className="text-sm text-neutral-500">
-          Show the timeline as a real overlay on screen (via vif-agent WKWebView)
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          <ControlButton
-            onClick={() => {
-              vifClient.send('timeline.show', {})
-              vifClient.send('timeline.scene', { yaml: SAMPLE_SCENE_YAML })
-            }}
-            icon="◧"
-            label="Show Panel"
-            variant="primary"
+
+        {/* Quick Actions - Launchpad Style */}
+        <div className="grid grid-cols-3 gap-3">
+          <QuickAction
+            to="/scenes"
+            icon={<FileText className="w-5 h-5" />}
+            label="Scenes"
+            description="Create and edit YAML scenes"
+            color="accent"
           />
-          <ControlButton
-            onClick={() => vifClient.send('timeline.hide', {})}
-            icon="✕"
-            label="Hide Panel"
+          <QuickAction
+            to="/sounds"
+            icon={<Volume2 className="w-5 h-5" />}
+            label="Sound Effects"
+            description="Browse CC0 SFX library"
+            color="purple"
           />
-          <ControlButton
-            onClick={() => vifClient.send('timeline.reset', {})}
-            icon="↺"
-            label="Reset"
+          <QuickAction
+            to="/videos"
+            icon={<Video className="w-5 h-5" />}
+            label="Video Library"
+            description="Manage video assets"
+            color="blue"
           />
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={async () => {
-              // Show panel and load scene first
-              await vifClient.send('timeline.show', {})
-              await vifClient.send('timeline.scene', { yaml: SAMPLE_SCENE_YAML })
 
-              // Simulate stepping through (14 steps in sample)
-              let step = 0
-              const interval = setInterval(async () => {
-                await vifClient.send('timeline.setstep', { index: step })
-                step++
-                if (step >= 14) {
-                  clearInterval(interval)
-                }
-              }, 600)
-            }}
-            className="flex-1 px-3 py-2 bg-vif-success/10 text-vif-success border border-vif-success/30 rounded-lg text-sm font-medium hover:bg-vif-success/20 transition-all"
+        {/* Server Info - Minimal */}
+        {connected && (
+          <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/50 border border-zinc-800/50 rounded-md text-xs">
+            <span className="text-zinc-500 font-mono truncate max-w-md">{status?.cwd || '...'}</span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => confirm('Restart?') && vifClient.send('restart')}
+                className="px-2 py-1 text-zinc-400 hover:text-vif-warning hover:bg-vif-warning/10 rounded transition-colors"
+              >
+                Restart
+              </button>
+              <button
+                onClick={() => confirm('Quit?') && vifClient.send('quit')}
+                className="px-2 py-1 text-zinc-400 hover:text-vif-danger hover:bg-vif-danger/10 rounded transition-colors"
+              >
+                Quit
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Running Scene Banner */}
+        {status?.scene && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-vif-warning/5 border border-vif-warning/20 rounded-lg">
+            <div className="w-2 h-2 rounded-full bg-vif-warning animate-pulse" />
+            <div className="flex-1">
+              <span className="text-sm font-medium text-vif-warning">{status.scene.name}</span>
+              <span className="text-xs text-zinc-500 ml-2">{formatUptime(Date.now() - status.scene.startTime)}</span>
+            </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => vifClient.send('scene.stop', {})}>
+              Stop
+            </Button>
+          </div>
+        )}
+
+        {/* Collapsible Stage Controls */}
+        <div className="border border-zinc-800/50 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowControls(!showControls)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition-colors"
           >
-            ▶ Simulate Playback
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              <span>Stage Controls</span>
+            </div>
+            {showControls ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
+
+          {showControls && (
+            <div className="border-t border-zinc-800/50 bg-zinc-900/30">
+              {/* Control buttons */}
+              <div className="px-4 py-3 grid grid-cols-4 gap-4">
+                <ControlGroup title="Cursor">
+                  <MiniButton onClick={() => vifClient.send('cursor.show', {})} label="Show" />
+                  <MiniButton onClick={() => vifClient.send('cursor.hide', {})} label="Hide" />
+                </ControlGroup>
+                <ControlGroup title="Backdrop">
+                  <MiniButton onClick={() => vifClient.send('backdrop.show', {})} label="Show" />
+                  <MiniButton onClick={() => vifClient.send('backdrop.hide', {})} label="Hide" />
+                </ControlGroup>
+                <ControlGroup title="Recording">
+                  <MiniButton onClick={() => vifClient.send('record.start', { mode: 'draft' })} label="Start" variant="primary" />
+                  <MiniButton onClick={() => vifClient.send('record.stop', {})} label="Stop" variant="danger" />
+                </ControlGroup>
+                <ControlGroup title="Stage">
+                  <MiniButton onClick={() => vifClient.send('stage.clear', {})} label="Clear" className="col-span-2" />
+                </ControlGroup>
+              </div>
+
+              {/* Timeline Preview */}
+              <div className="border-t border-zinc-800/50">
+                <TimelinePreview />
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
 
@@ -298,20 +213,18 @@ function TimelinePreview() {
   const [stepCount, setStepCount] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Count steps in sample scene
   useEffect(() => {
     const matches = SAMPLE_SCENE_YAML.match(/^\s+-\s/gm)
     setStepCount(matches?.length || 0)
   }, [])
 
-  // Auto-play logic
   useEffect(() => {
     if (isPlaying) {
       intervalRef.current = setInterval(() => {
         setCurrentStep(prev => {
           if (prev >= stepCount - 1) {
             setIsPlaying(false)
-            return -1 // Reset to beginning
+            return -1
           }
           return prev + 1
         })
@@ -359,72 +272,59 @@ function TimelinePreview() {
   }
 
   return (
-    <div className="glass-card overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
+    <div>
+      {/* Header with controls */}
+      <div className="px-4 py-2 flex items-center justify-between bg-zinc-900/50">
         <div className="flex items-center gap-2">
-          <span className="text-vif-accent">◧</span>
-          <h2 className="font-semibold">Timeline Overlay</h2>
-          <span className="text-xs text-neutral-500 ml-2">Component Preview</span>
+          <Film className="w-3.5 h-3.5 text-vif-accent" />
+          <span className="text-xs font-medium text-zinc-400">Timeline Preview</span>
         </div>
         <div className="flex items-center gap-2">
           {/* Playback controls */}
-          <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={handlePrevStep}
               disabled={currentStep <= 0 && currentStep !== -1}
-              className="w-8 h-8 rounded flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              title="Previous step"
+              className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors disabled:opacity-30"
             >
-              ⏮
+              <SkipBack className="w-3.5 h-3.5" />
             </button>
+
             {isPlaying ? (
-              <button
-                onClick={handlePause}
-                className="w-8 h-8 rounded flex items-center justify-center text-vif-warning hover:bg-white/10 transition-all"
-                title="Pause"
-              >
-                ⏸
+              <button onClick={handlePause} className="p-1.5 text-vif-warning hover:bg-zinc-800 rounded transition-colors">
+                <Pause className="w-3.5 h-3.5" />
               </button>
             ) : (
-              <button
-                onClick={handlePlay}
-                className="w-8 h-8 rounded flex items-center justify-center text-vif-success hover:bg-white/10 transition-all"
-                title="Play"
-              >
-                ▶
+              <button onClick={handlePlay} className="p-1.5 text-vif-success hover:bg-zinc-800 rounded transition-colors">
+                <Play className="w-3.5 h-3.5" />
               </button>
             )}
-            <button
-              onClick={handleStep}
-              className="w-8 h-8 rounded flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-all"
-              title="Next step"
-            >
-              ⏭
+
+            <button onClick={handleStep} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors">
+              <SkipForward className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={handleReset}
-              className="w-8 h-8 rounded flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-all"
-              title="Reset"
-            >
-              ↺
+
+            <button onClick={handleReset} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors">
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
+
           {/* Step indicator */}
-          <div className="text-xs text-neutral-500 font-mono min-w-[60px] text-right">
+          <span className="text-[10px] font-mono text-zinc-500 px-2 py-0.5 bg-zinc-800 rounded">
             {currentStep >= 0 ? `${currentStep + 1}/${stepCount}` : `0/${stepCount}`}
-          </div>
+          </span>
         </div>
       </div>
 
       {/* Timeline preview */}
       <div className="flex">
-        <div className="w-[280px] border-r border-white/[0.06]">
+        <div className="w-[240px] border-r border-zinc-800/50">
           <TimelineOverlay sceneYaml={SAMPLE_SCENE_YAML} currentStep={currentStep} />
         </div>
-        <div className="flex-1 p-6 bg-gradient-to-br from-white/[0.02] to-transparent">
-          <div className="text-center text-neutral-500">
-            <p className="text-sm">App preview area</p>
-            <p className="text-xs mt-1 opacity-60">Timeline would appear alongside your app during recording</p>
+        <div className="flex-1 p-4 flex items-center justify-center">
+          <div className="text-center text-zinc-600">
+            <Monitor className="w-6 h-6 mx-auto mb-1 opacity-40" />
+            <p className="text-xs">App preview</p>
           </div>
         </div>
       </div>
@@ -432,89 +332,100 @@ function TimelinePreview() {
   )
 }
 
-function StatusCard({
-  label,
-  value,
-  status,
-  icon,
-}: {
-  label: string
-  value: string
-  status: 'success' | 'error' | 'warning' | 'neutral'
-  icon: string
-}) {
-  const statusColors = {
-    success: 'text-vif-success',
-    error: 'text-vif-danger',
-    warning: 'text-vif-warning',
-    neutral: 'text-neutral-400',
-  }
+// Compact components for the launchpad design
 
-  const bgColors = {
-    success: 'from-vif-success/10',
-    error: 'from-vif-danger/10',
-    warning: 'from-vif-warning/10',
-    neutral: 'from-neutral-500/10',
+function StatusPill({ status, label }: { status: 'success' | 'error' | 'warning' | 'neutral'; label: string }) {
+  const colors = {
+    success: 'bg-vif-success/10 text-vif-success border-vif-success/20',
+    error: 'bg-vif-danger/10 text-vif-danger border-vif-danger/20',
+    warning: 'bg-vif-warning/10 text-vif-warning border-vif-warning/20',
+    neutral: 'bg-zinc-800 text-zinc-400 border-zinc-700',
   }
-
-  const glowColors = {
-    success: 'shadow-[0_0_20px_-5px_rgba(34,197,94,0.5)]',
-    error: 'shadow-[0_0_20px_-5px_rgba(239,68,68,0.5)]',
-    warning: 'shadow-[0_0_20px_-5px_rgba(234,179,8,0.5)]',
-    neutral: '',
-  }
-
   const dotColors = {
     success: 'bg-vif-success',
     error: 'bg-vif-danger',
     warning: 'bg-vif-warning',
-    neutral: 'bg-neutral-500',
+    neutral: 'bg-zinc-500',
   }
 
   return (
-    <div className={`glass-card p-4 bg-gradient-to-br ${bgColors[status]} to-transparent ${status !== 'neutral' ? glowColors[status] : ''} transition-shadow duration-500`}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {/* Animated status dot */}
-          <div className="relative">
-            <div className={`w-2.5 h-2.5 rounded-full ${dotColors[status]}`} />
-            {status !== 'neutral' && (
-              <div className={`absolute inset-0 w-2.5 h-2.5 rounded-full ${dotColors[status]} animate-ping opacity-75`} />
-            )}
-          </div>
-          <span className={`text-sm font-medium ${statusColors[status]}`}>{icon}</span>
-        </div>
-      </div>
-      <p className={`text-2xl font-bold tracking-tight ${statusColors[status]}`}>{value}</p>
-      <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">{label}</p>
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-medium ${colors[status]}`}>
+      <div className={`w-1.5 h-1.5 rounded-full ${dotColors[status]}`} />
+      {label}
     </div>
   )
 }
 
-function ControlButton({
-  onClick,
+function QuickAction({
+  to,
   icon,
   label,
+  description,
+  color,
+}: {
+  to: string
+  icon: React.ReactNode
+  label: string
+  description: string
+  color: 'accent' | 'purple' | 'blue' | 'green'
+}) {
+  const colorClasses = {
+    accent: 'text-vif-accent group-hover:bg-vif-accent/10',
+    purple: 'text-purple-400 group-hover:bg-purple-500/10',
+    blue: 'text-blue-400 group-hover:bg-blue-500/10',
+    green: 'text-vif-success group-hover:bg-vif-success/10',
+  }
+
+  return (
+    <Link
+      to={to}
+      className="group flex flex-col gap-2 p-4 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-zinc-700 transition-all shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+    >
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${colorClasses[color]}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-sm font-medium text-white">{label}</p>
+        <p className="text-xs text-zinc-500">{description}</p>
+      </div>
+    </Link>
+  )
+}
+
+function ControlGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">{title}</p>
+      <div className="grid grid-cols-2 gap-1">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function MiniButton({
+  onClick,
+  label,
   variant = 'default',
+  className = '',
 }: {
   onClick: () => void
-  icon: string
   label: string
   variant?: 'default' | 'primary' | 'danger'
+  className?: string
 }) {
   const variants = {
-    default: 'bg-white/[0.03] border-white/10 hover:bg-white/[0.08] hover:border-white/20',
-    primary: 'bg-vif-accent/10 border-vif-accent/30 text-vif-accent hover:bg-vif-accent/20',
-    danger: 'bg-vif-danger/10 border-vif-danger/30 text-vif-danger hover:bg-vif-danger/20',
+    default: 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300',
+    primary: 'bg-vif-accent/20 hover:bg-vif-accent/30 text-vif-accent-bright',
+    danger: 'bg-vif-danger/20 hover:bg-vif-danger/30 text-red-400',
   }
 
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-2.5 border rounded-lg text-sm transition-all ${variants[variant]}`}
+      className={`px-2 py-1.5 text-[11px] rounded transition-colors ${variants[variant]} ${className}`}
     >
-      <span className="opacity-60">{icon}</span>
-      <span>{label}</span>
+      {label}
     </button>
   )
 }

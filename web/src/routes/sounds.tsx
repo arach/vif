@@ -2,6 +2,29 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useRef, useEffect } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import {
+  Card,
+  CardContent,
+  Button,
+  Badge,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui'
+import {
+  Play,
+  Square,
+  ChevronDown,
+  Copy,
+  Trash2,
+  Volume2,
+  Radio,
+  Folder,
+  ChevronUp,
+  ChevronDownIcon,
+  Music,
+} from 'lucide-react'
 
 export const Route = createFileRoute('/sounds')({
   component: Sounds,
@@ -137,134 +160,154 @@ function Sounds() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold gradient-text">Sound Effects</h1>
-          <p className="text-neutral-500 mt-1">CC0 licensed sounds for your scenes</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-neutral-500">
-            {totalSounds} sound{totalSounds !== 1 ? 's' : ''} in {categories.length} categories
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={expandAll}
-              className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white transition-colors"
-            >
-              Expand All
-            </button>
-            <button
-              onClick={collapseAll}
-              className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white transition-colors"
-            >
-              Collapse All
-            </button>
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">Sound Effects</h1>
+            <p className="text-muted-foreground mt-1">CC0 licensed sounds for your scenes</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant="glass" className="gap-1">
+              <Volume2 className="w-3 h-3" />
+              {totalSounds} sound{totalSounds !== 1 ? 's' : ''} in {categories.length} categories
+            </Badge>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={expandAll}>
+                <ChevronDownIcon className="w-4 h-4 mr-1" />
+                Expand
+              </Button>
+              <Button variant="ghost" size="sm" onClick={collapseAll}>
+                <ChevronUp className="w-4 h-4 mr-1" />
+                Collapse
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {!connected ? (
-        <div className="glass-card p-12 text-center">
-          <p className="text-neutral-400">Connect to vif agent to browse sounds</p>
-        </div>
-      ) : isLoading ? (
-        <div className="glass-card p-12 text-center">
-          <p className="text-neutral-400">Loading sounds...</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {categories.map((category) => (
-            <div key={category.name} className="glass-card overflow-hidden">
-              {/* Category Header */}
-              <button
-                onClick={() => toggleCategory(category.name)}
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 text-neutral-400">{getCategoryIcon(category.name)}</span>
-                  <div className="text-left">
-                    <h2 className="font-medium capitalize">{category.name}</h2>
-                    <p className="text-xs text-neutral-500">{getCategoryDescription(category.name)}</p>
+        {!connected ? (
+          <Card variant="glass" className="p-12 text-center">
+            <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+            <p className="text-muted-foreground">Connect to vif agent to browse sounds</p>
+          </Card>
+        ) : isLoading ? (
+          <Card variant="glass" className="p-12 text-center">
+            <div className="w-8 h-8 mx-auto mb-3 border-2 border-vif-accent/30 border-t-vif-accent rounded-full animate-spin" />
+            <p className="text-muted-foreground">Loading sounds...</p>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {categories.map((category) => (
+              <Card key={category.name} variant="glass" className="overflow-hidden">
+                {/* Category Header */}
+                <button
+                  onClick={() => toggleCategory(category.name)}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary" className="text-[10px] font-mono uppercase">
+                      {getCategoryIcon(category.name)}
+                    </Badge>
+                    <div className="text-left">
+                      <h2 className="font-medium capitalize">{category.name}</h2>
+                      <p className="text-xs text-muted-foreground">{getCategoryDescription(category.name)}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-neutral-500">
-                    {category.sounds.length} sounds
-                  </span>
-                  <span className={`text-neutral-400 transition-transform ${expandedCategories.has(category.name) ? 'rotate-180' : ''}`}>
-                    ▼
-                  </span>
-                </div>
-              </button>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="glass">
+                      {category.sounds.length} sounds
+                    </Badge>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedCategories.has(category.name) ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
 
-              {/* Sounds List */}
-              {expandedCategories.has(category.name) && (
-                <div className="border-t border-white/[0.06]">
-                  {category.sounds.map((sound) => (
-                    <div
-                      key={sound.path}
-                      className="px-4 py-2 flex items-center justify-between hover:bg-white/[0.02] border-b border-white/[0.04] last:border-0"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <button
-                          onClick={() => playSound(sound.path)}
-                          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                            playingSound === sound.path
-                              ? 'bg-vif-accent text-white'
-                              : 'bg-white/5 text-neutral-400 hover:bg-white/10 hover:text-white'
-                          }`}
-                        >
-                          {playingSound === sound.path ? '■' : '▶'}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-mono text-sm truncate">{sound.name}</p>
-                          <p className="text-xs text-neutral-500">{formatSize(sound.size)}</p>
+                {/* Sounds List */}
+                {expandedCategories.has(category.name) && (
+                  <div className="border-t border-white/[0.06]">
+                    {category.sounds.map((sound) => (
+                      <div
+                        key={sound.path}
+                        className="px-4 py-2 flex items-center justify-between hover:bg-white/[0.02] border-b border-white/[0.04] last:border-0"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <Button
+                            variant={playingSound === sound.path ? "glass-primary" : "glass"}
+                            size="icon-sm"
+                            onClick={() => playSound(sound.path)}
+                            className="rounded-full"
+                          >
+                            {playingSound === sound.path ? (
+                              <Square className="w-3 h-3 fill-current" />
+                            ) : (
+                              <Play className="w-3 h-3" />
+                            )}
+                          </Button>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-mono text-sm truncate">{sound.name}</p>
+                            <p className="text-xs text-muted-foreground">{formatSize(sound.size)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyPath(sound.path)}
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Copy path to clipboard</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => deleteSound(sound.path, e)}
+                                disabled={deleteMutation.isPending}
+                                className="text-vif-danger/60 hover:text-vif-danger hover:bg-vif-danger/10"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete sound</TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => copyPath(sound.path)}
-                          className="px-2 py-1 text-xs text-neutral-500 hover:text-white transition-colors"
-                          title="Copy path"
-                        >
-                          Copy
-                        </button>
-                        <button
-                          onClick={(e) => deleteSound(sound.path, e)}
-                          disabled={deleteMutation.isPending}
-                          className="px-2 py-1 text-xs text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
-                          title="Delete sound"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+                    ))}
+                  </div>
+                )}
+              </Card>
+            ))}
 
-          {categories.length === 0 && (
-            <div className="glass-card p-12 text-center">
-              <p className="text-neutral-500">No sounds found</p>
-              <p className="text-sm text-neutral-600 mt-1">Add sounds to assets/sfx/</p>
-            </div>
-          )}
-        </div>
-      )}
+            {categories.length === 0 && (
+              <Card variant="glass" className="p-12 text-center">
+                <Music className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                <p className="text-muted-foreground">No sounds found</p>
+                <p className="text-sm text-muted-foreground/60 mt-1">Add sounds to assets/sfx/</p>
+              </Card>
+            )}
+          </div>
+        )}
 
-      {/* Usage hint */}
-      <div className="glass-card p-4">
-        <h3 className="text-sm font-medium text-neutral-300 mb-2">Usage in Scenes</h3>
-        <pre className="text-xs text-neutral-500 font-mono bg-black/20 p-3 rounded overflow-x-auto">
+        {/* Usage hint */}
+        <Card variant="glass">
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-white mb-2 flex items-center gap-2">
+              <Folder className="w-4 h-4 text-vif-accent" />
+              Usage in Scenes
+            </h3>
+            <pre className="text-xs text-muted-foreground font-mono bg-black/20 p-3 rounded-lg overflow-x-auto border border-white/[0.06]">
 {`sequence:
   - audio.play: assets/sfx/clicks/click1.wav
   - audio.play: assets/sfx/chimes/confirmation_001.ogg`}
-        </pre>
+            </pre>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }

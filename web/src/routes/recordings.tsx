@@ -2,6 +2,33 @@ import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Button,
+  Badge,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui'
+import {
+  Play,
+  Plus,
+  Film,
+  Video,
+  Music,
+  Volume2,
+  Wand2,
+  Check,
+  Mic,
+  Sparkles,
+  HardDrive,
+  Radio,
+} from 'lucide-react'
 
 export const Route = createFileRoute('/recordings')({
   component: PostProduction,
@@ -27,6 +54,7 @@ function PostProduction() {
   const [connected, setConnected] = useState(vifClient.connected)
   const [selectedVideo, setSelectedVideo] = useState<string | null>(initialVideo)
   const [isRendering, setIsRendering] = useState(false)
+  const [selectedFormat, setSelectedFormat] = useState('mp4')
 
   // Audio channel volumes
   const [volumes, setVolumes] = useState({
@@ -65,162 +93,221 @@ function PostProduction() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold gradient-text">Post-Production</h1>
-        <p className="text-neutral-500 mt-1">Mix audio tracks and render final output</p>
+        <p className="text-muted-foreground mt-1">Mix audio tracks and render final output</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left: Video Selection & Preview */}
-        <div className="col-span-2 space-y-6">
-          {/* Video Selector */}
-          <section className="glass-card p-5">
-            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide mb-4">Source Video</h2>
+      {!connected ? (
+        <Card variant="glass" className="p-12 text-center">
+          <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+          <p className="text-muted-foreground">Connect to vif server to edit recordings</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-3 gap-6">
+          {/* Left: Video Selection & Preview */}
+          <div className="col-span-2 space-y-6">
+            {/* Video Selector */}
+            <Card variant="glass">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Film className="w-4 h-4" />
+                  Source Video
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex gap-2 flex-wrap">
+                  {videos.map((video) => (
+                    <Button
+                      key={video.name}
+                      variant={selectedVideo === video.name ? "glass-primary" : "glass"}
+                      size="sm"
+                      onClick={() => setSelectedVideo(video.name)}
+                    >
+                      {video.name.replace('.mp4', '')}
+                    </Button>
+                  ))}
+                  {videos.length === 0 && (
+                    <p className="text-muted-foreground text-sm">No videos available. Record a scene first.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="flex gap-3 flex-wrap">
-              {videos.map((video) => (
-                <button
-                  key={video.name}
-                  onClick={() => setSelectedVideo(video.name)}
-                  className={`
-                    px-4 py-2 rounded-lg text-sm transition-all
-                    ${selectedVideo === video.name
-                      ? 'bg-vif-accent text-white'
-                      : 'bg-white/5 text-neutral-400 hover:bg-white/10 hover:text-white'
-                    }
-                  `}
-                >
-                  {video.name.replace('.mp4', '')}
-                </button>
-              ))}
-              {videos.length === 0 && (
-                <p className="text-neutral-500 text-sm">No videos available. Record a scene first.</p>
+            {/* Video Preview */}
+            <Card variant="glass" className="overflow-hidden">
+              <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center gap-2">
+                <Play className="w-4 h-4 text-vif-accent" />
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Preview</h2>
+              </div>
+              {selectedVideo ? (
+                <div className="bg-black">
+                  <VideoPlayer videoName={selectedVideo} />
+                </div>
+              ) : (
+                <div className="aspect-video flex items-center justify-center bg-neutral-900/50">
+                  <div className="text-center">
+                    <Video className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                    <p className="text-muted-foreground">Select a video to preview</p>
+                  </div>
+                </div>
               )}
-            </div>
-          </section>
+            </Card>
+          </div>
 
-          {/* Video Preview */}
-          <section className="glass-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
-              <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide">Preview</h2>
-            </div>
-            {selectedVideo ? (
-              <div className="bg-black">
-                <VideoPlayer videoName={selectedVideo} />
-              </div>
-            ) : (
-              <div className="aspect-video flex items-center justify-center bg-neutral-900/50">
-                <p className="text-neutral-500">Select a video to preview</p>
-              </div>
-            )}
-          </section>
+          {/* Right: Audio Mixing & Export */}
+          <div className="space-y-6">
+            {/* Audio Mixer */}
+            <Card variant="glass">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Volume2 className="w-4 h-4" />
+                  Audio Mixer
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-4">
+                <AudioChannel
+                  name="Narration"
+                  description="Voice recording via BlackHole"
+                  icon={<Mic className="w-4 h-4" />}
+                  color="blue"
+                  value={volumes.narration}
+                  onChange={(v) => setVolumes(prev => ({ ...prev, narration: v }))}
+                />
+                <AudioChannel
+                  name="Music"
+                  description="Background music track"
+                  icon={<Music className="w-4 h-4" />}
+                  color="purple"
+                  value={volumes.music}
+                  onChange={(v) => setVolumes(prev => ({ ...prev, music: v }))}
+                />
+                <AudioChannel
+                  name="SFX"
+                  description="Sound effects layer"
+                  icon={<Sparkles className="w-4 h-4" />}
+                  color="green"
+                  value={volumes.sfx}
+                  onChange={(v) => setVolumes(prev => ({ ...prev, sfx: v }))}
+                />
+
+                <div className="pt-4 border-t border-white/[0.06]">
+                  <Button variant="glass" className="w-full" disabled>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Audio Track
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Export Options */}
+            <Card variant="glass">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Wand2 className="w-4 h-4" />
+                  Export
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                <ExportFormat
+                  format="MP4"
+                  codec="H.264"
+                  description="Best compatibility"
+                  selected={selectedFormat === 'mp4'}
+                  onClick={() => setSelectedFormat('mp4')}
+                />
+                <ExportFormat
+                  format="WebM"
+                  codec="VP9"
+                  description="Smaller size, web optimized"
+                  selected={selectedFormat === 'webm'}
+                  onClick={() => setSelectedFormat('webm')}
+                />
+                <ExportFormat
+                  format="MOV"
+                  codec="ProRes"
+                  description="Professional editing"
+                  selected={selectedFormat === 'mov'}
+                  onClick={() => setSelectedFormat('mov')}
+                />
+
+                <div className="space-y-3 pt-4 border-t border-white/[0.06]">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Resolution</span>
+                    <Select defaultValue="original">
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="original">Original</SelectItem>
+                        <SelectItem value="1080p">1080p</SelectItem>
+                        <SelectItem value="720p">720p</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Quality</span>
+                    <Select defaultValue="high">
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Render Button */}
+            <Button
+              variant={selectedVideo && !isRendering ? "default" : "glass"}
+              size="xl"
+              className="w-full"
+              onClick={handleRender}
+              disabled={!selectedVideo || isRendering}
+            >
+              {isRendering ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                  Rendering...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Render Final Video
+                </>
+              )}
+            </Button>
+          </div>
         </div>
-
-        {/* Right: Audio Mixing & Export */}
-        <div className="space-y-6">
-          {/* Audio Mixer */}
-          <section className="glass-card p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide">Audio Mixer</h2>
-
-            <div className="space-y-4">
-              <AudioChannel
-                name="Narration"
-                description="Voice recording via BlackHole"
-                color="blue"
-                value={volumes.narration}
-                onChange={(v) => setVolumes(prev => ({ ...prev, narration: v }))}
-              />
-              <AudioChannel
-                name="Music"
-                description="Background music track"
-                color="purple"
-                value={volumes.music}
-                onChange={(v) => setVolumes(prev => ({ ...prev, music: v }))}
-              />
-              <AudioChannel
-                name="SFX"
-                description="Sound effects layer"
-                color="green"
-                value={volumes.sfx}
-                onChange={(v) => setVolumes(prev => ({ ...prev, sfx: v }))}
-              />
-            </div>
-
-            <div className="pt-4 border-t border-white/[0.06]">
-              <button className="w-full px-4 py-2 bg-white/5 text-neutral-400 rounded-lg text-sm hover:bg-white/10 hover:text-white transition-all">
-                + Add Audio Track
-              </button>
-            </div>
-          </section>
-
-          {/* Export Options */}
-          <section className="glass-card p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide">Export</h2>
-
-            <div className="space-y-3">
-              <ExportFormat format="MP4" codec="H.264" description="Best compatibility" selected />
-              <ExportFormat format="WebM" codec="VP9" description="Smaller size, web optimized" />
-              <ExportFormat format="MOV" codec="ProRes" description="Professional editing" />
-            </div>
-
-            <div className="space-y-3 pt-4 border-t border-white/[0.06]">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-neutral-500">Resolution</span>
-                <select className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm">
-                  <option>Original</option>
-                  <option>1080p</option>
-                  <option>720p</option>
-                </select>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-neutral-500">Quality</span>
-                <select className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm">
-                  <option>High</option>
-                  <option>Medium</option>
-                  <option>Low</option>
-                </select>
-              </div>
-            </div>
-          </section>
-
-          {/* Render Button */}
-          <button
-            onClick={handleRender}
-            disabled={!selectedVideo || isRendering}
-            className={`
-              w-full py-4 rounded-xl text-lg font-semibold transition-all
-              ${selectedVideo && !isRendering
-                ? 'bg-gradient-to-r from-vif-accent to-purple-500 text-white hover:shadow-glow'
-                : 'bg-white/5 text-neutral-600 cursor-not-allowed'
-              }
-            `}
-          >
-            {isRendering ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Rendering...
-              </span>
-            ) : (
-              'Render Final Video'
-            )}
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Recent Renders */}
-      <section className="glass-card p-5">
-        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide mb-4">Recent Renders</h2>
-        <div className="grid grid-cols-4 gap-4">
-          {videos.filter(v => v.name.includes('final')).length > 0 ? (
-            videos.filter(v => v.name.includes('final')).map((video) => (
-              <RenderCard key={video.name} video={video} />
-            ))
-          ) : (
-            <div className="col-span-4 py-8 text-center text-neutral-500">
-              <p>No rendered videos yet</p>
-              <p className="text-sm text-neutral-600 mt-1">Select a source video and click Render to create your first final output</p>
-            </div>
-          )}
-        </div>
-      </section>
+      <Card variant="glass">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+            <Film className="w-4 h-4" />
+            Recent Renders
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-4 gap-4">
+            {videos.filter(v => v.name.includes('final')).length > 0 ? (
+              videos.filter(v => v.name.includes('final')).map((video) => (
+                <RenderCard key={video.name} video={video} />
+              ))
+            ) : (
+              <div className="col-span-4 py-8 text-center">
+                <Film className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                <p className="text-muted-foreground">No rendered videos yet</p>
+                <p className="text-sm text-muted-foreground/60 mt-1">Select a source video and click Render to create your first final output</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -242,7 +329,8 @@ function VideoPlayer({ videoName }: { videoName: string }) {
     return (
       <div className="aspect-video flex items-center justify-center bg-neutral-900">
         <div className="text-center">
-          <p className="text-neutral-500">Failed to load video</p>
+          <Video className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+          <p className="text-muted-foreground">Failed to load video</p>
         </div>
       </div>
     )
@@ -263,12 +351,14 @@ function VideoPlayer({ videoName }: { videoName: string }) {
 function AudioChannel({
   name,
   description,
+  icon,
   color,
   value,
   onChange,
 }: {
   name: string
   description: string
+  icon: React.ReactNode
   color: 'blue' | 'purple' | 'green'
   value: number
   onChange: (value: number) => void
@@ -279,14 +369,24 @@ function AudioChannel({
     green: 'bg-green-500',
   }
 
+  const trackColors = {
+    blue: 'accent-blue-500',
+    purple: 'accent-purple-500',
+    green: 'accent-green-500',
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${colors[color]}`} />
+          <div className={`w-6 h-6 rounded flex items-center justify-center ${colors[color]}/20 text-${color}-400`}>
+            {icon}
+          </div>
           <span className="text-sm font-medium">{name}</span>
         </div>
-        <span className="text-xs text-neutral-500">{value}%</span>
+        <Badge variant="secondary" className="font-mono text-xs">
+          {value}%
+        </Badge>
       </div>
       <input
         type="range"
@@ -294,9 +394,9 @@ function AudioChannel({
         max="100"
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value))}
-        className="w-full accent-neutral-400"
+        className={`w-full ${trackColors[color]}`}
       />
-      <p className="text-xs text-neutral-600">{description}</p>
+      <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   )
 }
@@ -306,29 +406,29 @@ function ExportFormat({
   codec,
   description,
   selected,
+  onClick,
 }: {
   format: string
   codec: string
   description: string
   selected?: boolean
+  onClick: () => void
 }) {
   return (
-    <div className={`
-      p-3 rounded-lg cursor-pointer transition-all border
-      ${selected
-        ? 'border-vif-accent/50 bg-vif-accent/10'
-        : 'border-white/[0.06] bg-white/[0.02] hover:border-white/20'
-      }
-    `}>
+    <Card
+      variant={selected ? "glass" : "glass-interactive"}
+      className={`p-3 cursor-pointer ${selected ? 'border-vif-accent/50 bg-vif-accent/10' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <div>
           <span className="font-medium text-sm">{format}</span>
-          <span className="text-xs text-neutral-500 ml-2">({codec})</span>
+          <Badge variant="secondary" className="ml-2 text-[10px]">{codec}</Badge>
         </div>
-        {selected && <span className="text-vif-accent">✓</span>}
+        {selected && <Check className="w-4 h-4 text-vif-accent" />}
       </div>
-      <p className="text-xs text-neutral-500 mt-1">{description}</p>
-    </div>
+      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+    </Card>
   )
 }
 
@@ -339,12 +439,15 @@ function RenderCard({ video }: { video: VideoFile }) {
   }
 
   return (
-    <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-white/20 transition-all cursor-pointer">
-      <div className="aspect-video bg-neutral-800 rounded mb-2 flex items-center justify-center">
-        <span className="text-neutral-600">▶</span>
+    <Card variant="glass-interactive" className="p-3">
+      <div className="aspect-video bg-neutral-800 rounded mb-2 flex items-center justify-center border border-white/[0.06]">
+        <Play className="w-4 h-4 text-muted-foreground" />
       </div>
       <p className="text-sm font-medium truncate">{video.name.replace('.mp4', '')}</p>
-      <p className="text-xs text-neutral-500">{formatSize(video.size)}</p>
-    </div>
+      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+        <HardDrive className="w-3 h-3" />
+        {formatSize(video.size)}
+      </p>
+    </Card>
   )
 }
