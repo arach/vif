@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useRef, useEffect } from 'react'
 import { vifClient } from '@/lib/vif-client'
 
@@ -35,11 +35,29 @@ function Sounds() {
     return vifClient.onConnection(setConnected)
   }, [])
 
+  const queryClient = useQueryClient()
+
   const { data: sfxData, isLoading } = useQuery({
     queryKey: ['sfx-list'],
     queryFn: () => vifClient.send<SfxResponse>('sfx.list', {}),
     enabled: connected,
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (path: string) => vifClient.send('sfx.delete', { path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sfx-list'] })
+    },
+  })
+
+  const deleteSound = (path: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (playingSound === path) {
+      audioRef.current?.pause()
+      setPlayingSound(null)
+    }
+    deleteMutation.mutate(path)
+  }
 
   const categories = sfxData?.categories || []
   const totalSounds = categories.reduce((sum, cat) => sum + cat.sounds.length, 0)
@@ -96,14 +114,14 @@ function Sounds() {
 
   const getCategoryIcon = (name: string) => {
     const icons: Record<string, string> = {
-      clicks: '🖱️',
-      typing: '⌨️',
-      chimes: '🔔',
-      transitions: '💨',
-      shutter: '📷',
-      errors: '⚠️',
+      clicks: 'click',
+      typing: 'type',
+      chimes: 'chime',
+      transitions: 'trans',
+      shutter: 'snap',
+      errors: 'err',
     }
-    return icons[name] || '🔊'
+    return icons[name] || 'sfx'
   }
 
   const getCategoryDescription = (name: string) => {
@@ -149,12 +167,10 @@ function Sounds() {
 
       {!connected ? (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4 opacity-50">📡</div>
           <p className="text-neutral-400">Connect to vif agent to browse sounds</p>
         </div>
       ) : isLoading ? (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4 animate-pulse">⏳</div>
           <p className="text-neutral-400">Loading sounds...</p>
         </div>
       ) : (
@@ -167,7 +183,7 @@ function Sounds() {
                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{getCategoryIcon(category.name)}</span>
+                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 text-neutral-400">{getCategoryIcon(category.name)}</span>
                   <div className="text-left">
                     <h2 className="font-medium capitalize">{category.name}</h2>
                     <p className="text-xs text-neutral-500">{getCategoryDescription(category.name)}</p>
@@ -207,13 +223,23 @@ function Sounds() {
                           <p className="text-xs text-neutral-500">{formatSize(sound.size)}</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => copyPath(sound.path)}
-                        className="px-2 py-1 text-xs text-neutral-500 hover:text-white transition-colors"
-                        title="Copy path"
-                      >
-                        Copy Path
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => copyPath(sound.path)}
+                          className="px-2 py-1 text-xs text-neutral-500 hover:text-white transition-colors"
+                          title="Copy path"
+                        >
+                          Copy
+                        </button>
+                        <button
+                          onClick={(e) => deleteSound(sound.path, e)}
+                          disabled={deleteMutation.isPending}
+                          className="px-2 py-1 text-xs text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
+                          title="Delete sound"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -223,7 +249,6 @@ function Sounds() {
 
           {categories.length === 0 && (
             <div className="glass-card p-12 text-center">
-              <div className="text-4xl mb-4 opacity-30">🔇</div>
               <p className="text-neutral-500">No sounds found</p>
               <p className="text-sm text-neutral-600 mt-1">Add sounds to assets/sfx/</p>
             </div>

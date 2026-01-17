@@ -109,7 +109,7 @@ function Dashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-vif-accent/20 to-purple-500/20 flex items-center justify-center border border-white/10">
-                <span className="text-vif-accent">⚡</span>
+                <span className="text-vif-accent font-bold text-sm">V</span>
               </div>
               <div>
                 <p className="text-sm font-medium text-white">Server Control</p>
@@ -220,10 +220,7 @@ function Dashboard() {
 
         {/* Keys Controls */}
         <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-cyan-400">⌨</span>
-            <h2 className="font-semibold">Keys Overlay</h2>
-          </div>
+          <h2 className="font-semibold">Keys Overlay</h2>
           <div className="grid grid-cols-2 gap-2">
             <ControlButton onClick={() => vifClient.send('keys.show', { keys: ['cmd', 'shift', 'p'] })} icon="⌘" label="Cmd+Shift+P" />
             <ControlButton onClick={() => vifClient.send('keys.show', { keys: ['cmd', 's'] })} icon="⌘" label="Cmd+S" />
@@ -426,7 +423,6 @@ function TimelinePreview() {
         </div>
         <div className="flex-1 p-6 bg-gradient-to-br from-white/[0.02] to-transparent">
           <div className="text-center text-neutral-500">
-            <div className="text-4xl mb-3 opacity-30">🎬</div>
             <p className="text-sm">App preview area</p>
             <p className="text-xs mt-1 opacity-60">Timeline would appear alongside your app during recording</p>
           </div>

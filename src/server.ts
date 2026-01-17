@@ -1197,17 +1197,41 @@ export class JsonRpcServer {
   // ─── SFX Commands ───────────────────────────────────────────────────────────
 
   private async handleSfxCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    const projectRoot = resolve(import.meta.dirname, '..');
+    const sfxDir = join(projectRoot, 'assets', 'sfx');
+
     switch (method) {
       case 'list': {
-        // List SFX from assets/sfx directory
-        const projectRoot = resolve(import.meta.dirname, '..');
-        const sfxDir = join(projectRoot, 'assets', 'sfx');
-
         try {
           const categories = await this.scanSfxDir(sfxDir);
           return { id, ok: true, categories, dir: sfxDir };
         } catch (err) {
           return { id, ok: true, categories: [], dir: sfxDir, error: 'No sounds found' };
+        }
+      }
+
+      case 'delete': {
+        const path = cmd.path as string;
+        if (!path) return { id, ok: false, error: 'sfx.delete requires path' };
+
+        // Security: no path traversal
+        if (path.includes('..')) {
+          return { id, ok: false, error: 'Invalid path' };
+        }
+
+        const fullPath = join(sfxDir, path);
+
+        // Ensure path is within sfxDir
+        if (!fullPath.startsWith(sfxDir)) {
+          return { id, ok: false, error: 'Invalid path' };
+        }
+
+        try {
+          const { unlink } = await import('fs/promises');
+          await unlink(fullPath);
+          return { id, ok: true, deleted: path };
+        } catch {
+          return { id, ok: false, error: `Failed to delete: ${path}` };
         }
       }
 

@@ -133,7 +133,7 @@ function Scenes() {
       {/* Path indicator */}
       {scenesData?.dir && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-neutral-500">📁</span>
+          <span className="text-neutral-500 text-xs font-mono">DIR</span>
           <code className="font-mono text-neutral-400 bg-white/5 px-2 py-1 rounded">
             {scenesData.dir}
           </code>
@@ -145,13 +145,11 @@ function Scenes() {
 
       {!connected ? (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4 opacity-50">📡</div>
-          <p className="text-neutral-400">Connect to vif agent to view scenes</p>
+                    <p className="text-neutral-400">Connect to vif agent to view scenes</p>
         </div>
       ) : isLoading ? (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4 animate-pulse">⏳</div>
-          <p className="text-neutral-400">Loading scenes...</p>
+                    <p className="text-neutral-400">Loading scenes...</p>
         </div>
       ) : (
         <div className="grid grid-cols-5 gap-6">
@@ -169,8 +167,7 @@ function Scenes() {
             ))}
             {scenes.length === 0 && (
               <div className="glass-card p-8 text-center">
-                <div className="text-3xl mb-3 opacity-50">🎬</div>
-                <p className="text-neutral-500">No scenes found</p>
+                                <p className="text-neutral-500">No scenes found</p>
                 <p className="text-sm text-neutral-600 mt-1">Create a scene to get started</p>
               </div>
             )}
@@ -250,8 +247,7 @@ function Scenes() {
                       <TimelineOverlay sceneYaml={liveYaml} currentStep={liveStep} />
                     ) : (
                       <div className="p-8 text-center">
-                        <div className="text-3xl mb-3 opacity-30">📡</div>
-                        <p className="text-neutral-500">Run a scene to see live timeline</p>
+                                                <p className="text-neutral-500">Run a scene to see live timeline</p>
                         <p className="text-xs text-neutral-600 mt-2">The timeline will appear here when a scene starts</p>
                       </div>
                     )
@@ -278,8 +274,7 @@ function Scenes() {
                       </div>
                     ) : (
                       <div className="p-8 text-center">
-                        <div className="text-3xl mb-3 opacity-30">📝</div>
-                        <p className="text-neutral-500">No changes to review</p>
+                                                <p className="text-neutral-500">No changes to review</p>
                         <p className="text-xs text-neutral-600 mt-2">
                           When an agent modifies this scene, the diff will appear here
                         </p>
@@ -318,8 +313,7 @@ function Scenes() {
               </div>
             ) : (
               <div className="glass-card p-12 text-center sticky top-8">
-                <div className="text-4xl mb-4 opacity-30">👈</div>
-                <p className="text-neutral-500">Select a scene to preview</p>
+                                <p className="text-neutral-500">Select a scene to preview</p>
               </div>
             )}
           </div>

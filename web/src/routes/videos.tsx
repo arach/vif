@@ -101,12 +101,10 @@ function Videos() {
 
       {!connected ? (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4 opacity-50">📡</div>
           <p className="text-neutral-400">Connect to vif server to view videos</p>
         </div>
       ) : isLoading ? (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4 animate-pulse">⏳</div>
           <p className="text-neutral-400">Loading videos...</p>
         </div>
       ) : (
@@ -125,7 +123,6 @@ function Videos() {
             ))}
             {videos.length === 0 && (
               <div className="glass-card p-8 text-center">
-                <div className="text-3xl mb-3 opacity-50">🎬</div>
                 <p className="text-neutral-500">No videos yet</p>
                 <p className="text-sm text-neutral-600 mt-1">Run a scene to create your first recording</p>
               </div>
@@ -196,7 +193,6 @@ function Videos() {
               </div>
             ) : (
               <div className="glass-card p-12 text-center sticky top-8">
-                <div className="text-5xl mb-4 opacity-20">🎥</div>
                 <p className="text-neutral-500">Select a video to preview</p>
                 <p className="text-xs text-neutral-600 mt-2">Videos are stored in ~/.vif</p>
               </div>
@@ -282,7 +278,6 @@ function VideoPlayer({ videoName }: { videoName: string }) {
     return (
       <div className="aspect-video flex items-center justify-center bg-neutral-900">
         <div className="text-center">
-          <div className="text-3xl mb-2 opacity-50">⚠️</div>
           <p className="text-neutral-500">Failed to load video</p>
           <p className="text-xs text-neutral-600 mt-1">Check if the HTTP server is running on port 7852</p>
         </div>

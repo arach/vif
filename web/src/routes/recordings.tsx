@@ -195,7 +195,7 @@ function PostProduction() {
           >
             {isRendering ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin">⏳</span>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 Rendering...
               </span>
             ) : (
@@ -242,7 +242,6 @@ function VideoPlayer({ videoName }: { videoName: string }) {
     return (
       <div className="aspect-video flex items-center justify-center bg-neutral-900">
         <div className="text-center">
-          <div className="text-3xl mb-2 opacity-50">⚠️</div>
           <p className="text-neutral-500">Failed to load video</p>
         </div>
       </div>
