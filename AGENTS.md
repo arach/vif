@@ -1,191 +1,547 @@
-# Vif - Agent Instructions
+# vif
 
-Declarative screen capture and demo automation for macOS. Built for AI agents and LLMs.
+> Screen capture and browser automation for macOS, designed for AI agents
 
-> **Terminology:** "Agent" in this doc refers to AI coding agents (Claude, Cursor, etc.). The Swift process that performs macOS automation is called the "automation daemon" (`src/agent/main.swift`).
+## Critical Context
 
-## Project Overview
+**IMPORTANT:** Read these rules before making any changes:
 
-Vif is a CLI tool and library for creating automated demo recordings. It provides:
+- macOS only - uses screencapture, Accessibility API, and native Swift
+- Requires Screen Recording and Accessibility permissions in System Settings
+- Start vif server with `vif serve` before using vif-ctl commands or MCP tools
+- Browser automation uses Chrome DevTools Protocol (CDP) - Chrome must be running
+- Scene DSL uses YAML files - validate with `vif play --validate scene.yaml`
 
-- **Declarative DSL**: Define demo sequences in YAML scene files
-- **App automation**: Click, type, navigate through apps
-- **Screen capture**: Record video, screenshots
-- **Voice injection**: Play audio through virtual microphones for voice-enabled app demos
-- **VifTargets SDK**: Protocol for apps to expose their UI elements for automation
+## Project Structure
 
-## Setup Commands
+| Component | Path | Purpose |
+|-----------|------|---------|
+| Main | `src/index.ts` | |
+| Browser | `src/browser.ts` | |
+| Cdp | `src/cdp/` | |
+| Mcp | `src/mcp/` | |
+| Cli | `src/cli/` | |
 
-```bash
-# Install dependencies
-pnpm install
+## Quick Navigation
 
-# Build TypeScript
-pnpm build
+- Working with **screenshot|capture|record**? → Check src/index.ts for capture functions
+- Working with **browser|chrome|cdp**? → Check src/browser.ts and src/cdp/ for browser automation
+- Working with **mcp|tool|claude**? → Check src/mcp/ for MCP server and tools
+- Working with **scene|yaml|dsl**? → Check src/scene-runner.ts for scene execution
+- Working with **cursor|label|backdrop|overlay**? → Check src/cursor.ts and src/viewport.ts
 
-# Build automation daemon (required for overlays/clicks)
-pnpm build:agent
-```
+## Overview
 
-## Build and Test
+> Screen capture and browser automation for macOS, designed for AI agents
 
-```bash
-# Build everything
-pnpm build && pnpm build:agent
+# Overview
 
-# Run the CLI
-./dist/cli.js --help
+**vif** is a screen capture and browser automation toolkit for macOS, designed specifically for AI agents and LLMs.
 
-# Run a demo scene
-./dist/cli.js play demos/scenes/your-scene.yaml
-```
+## What is vif?
 
-## Agentic Control
+vif combines three capabilities:
 
-For programmatic/imperative control (not YAML scenes).
+1. **Screen Capture** - Screenshots, video recording, and GIF creation using native macOS tools
+2. **Browser Automation** - Chrome automation via Chrome DevTools Protocol (CDP)
+3. **Demo Automation** - Visual overlays (cursor, labels, keys) for recording polished demos
 
-> **Important:** `vif serve` must be running for vif-ctl commands to work.
+Everything is designed to work with AI agents: predictable CLI output, MCP tools for Claude Code, and a Stagehand-style API for programmatic control.
 
-```bash
-# Start automation server (required - run in separate terminal)
-vif serve
+## Key Features
 
-# Control via vif-ctl CLI
-vif-ctl backdrop on                 # Show backdrop
-vif-ctl cursor show                 # Show cursor
-vif-ctl cursor move 500 300 0.5     # Move cursor
-vif-ctl label show "Demo text"      # Show label
-vif-ctl stage clear                 # Clear all
+### Screen Capture
+- Screenshot windows, regions, or fullscreen
+- Video recording with optional audio
+- Convert to GIF, optimize for web
+- Take management (versioned screenshots)
 
-# Headless mode (hide control panel)
-vif-ctl panel headless on           # Enter headless
-vif-ctl panel headless off          # Exit headless
+### Browser Automation
+- Navigate, click, type, scroll in Chrome
+- Extract structured data from pages
+- Observe DOM elements with accessibility info
+- Stagehand-compatible API (`vif.observe()`, `vif.act()`)
 
-# MCP server for Claude/AI agents
-vif-mcp
-```
+### Demo Recording
+- Animated cursor overlay
+- Keyboard shortcut display
+- Text labels/teleprompter
+- Viewport highlighting
+- Backdrop dimming
 
-**Keyboard Shortcuts:**
-- `Escape` — Exit headless + clear all
-- `⌃⌥⌘V` — Toggle headless mode
-- `⇧⌘R` — Stop recording
-- `⇧⌘X` — Clear stage
-
-**MCP Tools Reference:**
-
-| Tool | Description |
-|------|-------------|
-| `vif_cursor_show` | Show animated cursor overlay |
-| `vif_cursor_hide` | Hide cursor |
-| `vif_cursor_move` | Move cursor (x, y, duration) |
-| `vif_cursor_click` | Click animation at current position |
-| `vif_label_show` | Show caption (text, position) |
-| `vif_label_update` | Update caption text |
-| `vif_label_hide` | Hide caption |
-| `vif_backdrop_show` | Show dark backdrop |
-| `vif_backdrop_hide` | Hide backdrop |
-| `vif_stage_center` | Center app window (app, width, height) |
-| `vif_stage_clear` | Clear all overlays |
-| `vif_viewport_set` | Set visible region (x, y, width, height) |
-| `vif_viewport_show` | Show viewport mask |
-| `vif_viewport_hide` | Hide viewport mask |
-| `vif_record_indicator` | Show/hide recording dot (show: bool) |
-| `vif_keys_show` | Show keyboard shortcut (keys[], press) |
-| `vif_keys_hide` | Hide keys overlay |
-| `vif_typer_type` | Animated typing (text, style, delay) |
-| `vif_typer_hide` | Hide typer |
+### AI Agent Integration
+- MCP server for Claude Code (`vif-mcp`)
+- CLI designed for LLM tool use (`vif`, `vif-ctl`)
+- Scene DSL for declarative automation
 
 ## Architecture
 
 ```
-src/
-├── cli.ts           # CLI entry point
-├── ctl.ts           # vif-ctl imperative CLI
-├── server.ts        # WebSocket server for control commands
-├── agent-client.ts  # Communicates with automation daemon
-├── mcp/
-│   └── server.ts    # MCP server for AI agents
-├── dsl/
-│   ├── parser.ts    # YAML scene parser
-│   ├── runner.ts    # Executes scene sequences
-│   └── targets.ts   # Target resolution
-└── agent/
-    └── main.swift   # Automation daemon (overlays, clicks, keyboard)
+┌─────────────────────────────────────────────────────────┐
+│                    Your AI Agent                         │
+│                (Claude Code, etc.)                       │
+└───────────────────────┬─────────────────────────────────┘
+                        │ MCP / CLI
+┌───────────────────────┴─────────────────────────────────┐
+│                      vif                                 │
+├─────────────────┬─────────────────┬─────────────────────┤
+│  Screen Capture │ Browser (CDP)   │   Demo Overlays     │
+│  - screencapture│ - navigate      │   - cursor          │
+│  - ffmpeg       │ - click/type    │   - labels          │
+│  - native APIs  │ - extract       │   - keys            │
+└─────────────────┴─────────────────┴─────────────────────┘
 ```
 
-**Key components:**
-- **Server** (`server.ts`): Hosts WebSocket for control communication
-- **Automation Daemon** (`agent/main.swift`): Swift process that executes macOS automation (overlays, clicks, keyboard). Note: "agent" in file paths refers to this daemon, not AI agents.
-- **Runner** (`dsl/runner.ts`): Interprets scene YAML and dispatches actions
+## Quick Links
 
-## Scene DSL Reference
+- [Quickstart](./quickstart.md) - Get started in 5 minutes
+- [Browser Automation](./browser.md) - Chrome automation via CDP
+- [Scene DSL](./scenes.md) - Declarative demo automation
+- [MCP Tools](./mcp.md) - Claude Code integration
 
-Scenes are YAML files that define automated demo sequences:
+## Quickstart
+
+> Get started with vif in 5 minutes
+
+# Quickstart
+
+Get up and running with vif in under 5 minutes.
+
+## Prerequisites
+
+- **macOS** (uses native screencapture, Accessibility API)
+- **Node.js 18+**
+- **Xcode Command Line Tools**: `xcode-select --install`
+- **ffmpeg** (optional, for video processing): `brew install ffmpeg`
+
+### Required Permissions
+
+Grant in **System Settings > Privacy & Security**:
+
+| Permission | Required For |
+|------------|--------------|
+| Screen Recording | Screenshots, video capture |
+| Accessibility | Mouse/keyboard automation |
+
+## Installation
+
+```bash
+# Install via pnpm
+pnpm add @arach/vif
+
+# Or globally for CLI access
+pnpm add -g @arach/vif
+```
+
+## Screen Capture
+
+```bash
+# Screenshot fullscreen
+vif shot screenshot.png
+
+# Screenshot an app window
+vif shot --app Safari safari.png
+
+# Record video (Ctrl+C to stop)
+vif record demo.mp4
+
+# Convert to GIF
+vif gif demo.mp4 demo.gif --width 600 --fps 15
+```
+
+## Browser Automation
+
+Control Chrome via CDP (Chrome DevTools Protocol):
+
+```typescript
+import { createVif } from '@arach/vif'
+
+const vif = createVif()
+
+// Launch Chrome and navigate
+await vif.launch('https://news.ycombinator.com')
+
+// Find elements on the page
+const elements = await vif.observe({ format: 'clickable-only' })
+console.log(elements)  // [{ selector: "a.storylink", text: "Show HN: ..." }, ...]
+
+// Click an element
+await vif.click('a.storylink:first-child')
+
+// Type into an input
+await vif.type('input[name="q"]', 'search query')
+
+// Extract data
+const data = await vif.extract({
+  title: 'title',
+  links: 'a.storylink'
+})
+
+await vif.close()
+```
+
+## Demo Overlays
+
+Show visual overlays for demo recordings:
+
+```bash
+# Start the automation server (required for overlays)
+vif serve
+
+# In another terminal:
+vif-ctl cursor show                     # Show animated cursor
+vif-ctl cursor move 500 300 0.5         # Move with animation
+vif-ctl label show "Recording demo"     # Show text label
+vif-ctl keys show cmd shift p           # Show keyboard shortcut
+vif-ctl backdrop on                     # Dim background
+vif-ctl stage clear                     # Clear all overlays
+```
+
+## MCP Server (Claude Code)
+
+Connect vif to Claude Code via MCP:
+
+```bash
+vif-mcp  # Start MCP server
+```
+
+Add to Claude Code's MCP config:
+```json
+{
+  "mcpServers": {
+    "vif": {
+      "command": "vif-mcp"
+    }
+  }
+}
+```
+
+Then ask Claude to use vif tools:
+- "Take a screenshot of Safari"
+- "Navigate Chrome to github.com and click Sign in"
+- "Show the cursor at 500, 300"
+
+## Scene DSL
+
+Define demo sequences in YAML:
 
 ```yaml
 scene:
-  name: Demo Name
-  mode: draft  # or 'final'
+  name: My Demo
+  mode: draft
 
-# Import app definitions
-import:
-  - ./apps/myapp.yaml
-
-# Stage configuration
-stage:
-  backdrop: true
-  viewport:
-    padding: 10
-
-# Demo sequence
 sequence:
   - wait: 500ms
-  - record: start
-  - click: sidebar.home          # Navigation target (uses HTTP API)
-  - click: save-button           # Click target (uses coordinates)
-  - input.type:                  # Type text
-      text: "Hello world"
-      delay: 0.03
-  - voice.play: ./audio/cmd.wav  # Play audio through virtual mic
-  - record: stop
+  - cursor.show: {}
+  - cursor.moveTo: { x: 500, y: 300 }
+  - cursor.click: {}
+  - label.show: "Welcome!"
+  - wait: 2s
+  - stage.clear: {}
 ```
 
-## App Integration (VifTargets)
+Run:
+```bash
+vif play demo.yaml              # Execute scene
+vif play --validate demo.yaml   # Validate only
+vif play --watch demo.yaml      # Re-run on changes
+```
 
-Apps expose UI elements via HTTP on port 7851:
+## Next Steps
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/vif/targets` | GET | Returns all navigation and click targets |
-| `/vif/navigate` | POST | Triggers navigation (body: `{"section": "name"}`) |
-| `/vif/state` | GET | Returns current app state |
+- [Browser Automation](./browser.md) - Full CDP API reference
+- [Scene DSL](./scenes.md) - Complete scene syntax
+- [MCP Tools](./mcp.md) - All available MCP tools
 
-**Target types:**
-- `nav.*` - Navigation targets (use HTTP API, more reliable)
-- Click targets - Screen coordinates for buttons/fields
+## Browser Automation
 
-## Code Style
+> Chrome automation via Chrome DevTools Protocol (CDP)
 
-- TypeScript with strict mode
-- Use `pnpm` for package management
-- Gitmoji in commit messages (e.g., `✨ Add feature`, `🐛 Fix bug`)
-- No co-author footers in commits
+# Browser Automation
 
-## Key Files
+vif provides Chrome automation via the Chrome DevTools Protocol (CDP). The API is inspired by Stagehand but runs locally without external AI inference costs.
 
-- `src/dsl/parser.ts` - Scene YAML types and parser
-- `src/dsl/runner.ts` - Scene execution logic
-- `src/agent/main.swift` - macOS automation commands
-- `demos/scenes/` - Example scene files
-- `demos/scenes/apps/` - App definition files
+## Quick Example
 
-## Integration Guide
+```typescript
+import { createVif } from '@arach/vif'
 
-For comprehensive integration documentation, see **[INTEGRATION.md](INTEGRATION.md)** — the single source of truth covering:
+const vif = createVif()
+await vif.launch('https://news.ycombinator.com')
 
-- VifTargets SDK implementation (Swift code)
-- SwiftUI modifiers for click targets
-- Coordinate system conversion
-- Scene DSL reference
-- Voice injection setup
-- Troubleshooting
+// Find elements on page
+const { elements } = await vif.observe()
+console.log(elements)
+// [{ nodeId: 42, tag: 'a', label: 'Hacker News', text: '...', bounds: {...} }, ...]
+
+// Click an element
+await vif.click('a.storylink:first-child')
+
+// Type into input
+await vif.type('input[name="q"]', 'search query')
+
+// Extract data
+const data = await vif.extract({
+  title: 'title',
+  links: 'a.storylink'
+})
+
+await vif.close()
+```
+
+## The Vif Class
+
+### Constructor Options
+
+```typescript
+interface VifOptions {
+  /** Chrome debugging port (default: 9222) */
+  port?: number;
+  /** Run in headless mode */
+  headless?: boolean;
+  /** Additional Chrome flags */
+  chromeFlags?: string[];
+}
+
+const vif = new Vif({
+  port: 9222,
+  headless: true,
+  chromeFlags: ['--disable-gpu']
+})
+```
+
+### Lifecycle Methods
+
+```typescript
+// Launch Chrome and connect
+await vif.launch('https://example.com')
+
+// Or connect to existing Chrome
+await vif.connect()
+
+// Check connection
+vif.isConnected()  // boolean
+
+// Close browser
+await vif.close()
+```
+
+### Navigation
+
+```typescript
+// Navigate to URL
+await vif.navigate('https://example.com')
+
+// History navigation
+await vif.back()
+await vif.forward()
+await vif.reload()
+
+// Get current URL
+const currentUrl = await vif.url()
+```
+
+## Observation (Stagehand-style)
+
+The `observe()` method returns interactive elements on the page. Unlike Stagehand, vif doesn't call an external LLM - it returns structured data that you (or Claude) can interpret.
+
+```typescript
+// Get all clickable elements
+const { elements } = await vif.observe()
+
+// Filter by selector
+const { elements } = await vif.observe({ selector: 'button' })
+
+// Elements include:
+interface ClickableElement {
+  nodeId: number;      // CDP node ID (use with clickNode)
+  tag: string;         // Element tag name
+  role: string;        // ARIA role
+  label: string;       // Accessible name
+  text: string;        // Text content
+  selector: string;    // CSS selector
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    centerX: number;
+    centerY: number;
+  };
+}
+```
+
+### Accessibility Tree
+
+```typescript
+// Get full accessibility tree
+const tree = await vif.accessibility()
+
+interface AccessibilityNode {
+  nodeId: number;
+  role: string;
+  name: string;
+  value?: string;
+  description?: string;
+  children?: AccessibilityNode[];
+}
+```
+
+## Actions
+
+### Click
+
+```typescript
+// Click by CSS selector
+await vif.click('button.submit')
+
+// Click by node ID (from observe)
+const { elements } = await vif.observe()
+await vif.clickNode(elements[0].nodeId)
+
+// Natural language click (fuzzy match)
+await vif.act('click the submit button')
+await vif.act('click Login')
+await vif.act('tap on Sign Up')
+```
+
+### Type
+
+```typescript
+// Type into element
+await vif.type('input[name="email"]', 'user@example.com')
+
+// With options
+await vif.type('input[name="email"]', 'user@example.com', {
+  clear: true,    // Clear existing text first
+  delay: 50       // Delay between keystrokes (ms)
+})
+
+// Type into focused element
+await vif.typeText('Hello world')
+```
+
+### Keyboard
+
+```typescript
+// Press single key
+await vif.press('Enter')
+await vif.press('Tab')
+await vif.press('Escape')
+
+// Keyboard shortcut
+await vif.press(['Control', 'a'])  // Select all
+await vif.press(['Meta', 'c'])     // Copy (Cmd+C on Mac)
+```
+
+### Mouse
+
+```typescript
+// Hover over element
+await vif.hover('button.menu')
+
+// Scroll
+await vif.scroll('down')
+await vif.scroll('up', { amount: 500 })
+await vif.scroll('down', { selector: '.scrollable-container' })
+```
+
+## Data Extraction
+
+```typescript
+// Extract text by selectors
+const data = await vif.extract({
+  title: 'h1',
+  description: 'meta[name="description"]',
+  links: 'a.nav-link'  // Multiple matches return array
+})
+// { title: 'Page Title', description: '...', links: ['Home', 'About', 'Contact'] }
+
+// Get text of single element
+const heading = await vif.getText('h1')
+
+// Get attribute value
+const href = await vif.getAttribute('a.main-link', 'href')
+```
+
+## Screenshots
+
+```typescript
+// Screenshot to temp file
+const path = await vif.screenshot()
+
+// Save to specific path
+await vif.screenshot({ path: './screenshot.png' })
+
+// Full page screenshot
+await vif.screenshot({ fullPage: true, path: './full.png' })
+
+// Element screenshot
+await vif.screenshot({ selector: '.hero-section', path: './hero.png' })
+
+// Different formats
+await vif.screenshot({ format: 'jpeg', path: './shot.jpg' })
+await vif.screenshot({ format: 'webp', path: './shot.webp' })
+```
+
+## Waiting
+
+```typescript
+// Wait for element to appear
+await vif.waitForSelector('.dynamic-content')
+
+// With timeout
+await vif.waitForSelector('.modal', 5000)  // 5 seconds
+
+// Wait for navigation
+await vif.waitForNavigation()
+
+// Fixed delay
+await vif.wait(1000)  // 1 second
+```
+
+## JavaScript Evaluation
+
+```typescript
+// Execute JS in page context
+const title = await vif.evaluate('document.title')
+
+const dimensions = await vif.evaluate(`({
+  width: window.innerWidth,
+  height: window.innerHeight
+})`)
+```
+
+## How It Differs from Stagehand
+
+| Feature | Stagehand | vif |
+|---------|-----------|-----|
+| AI inference | External API (paid) | None (local) |
+| `observe()` | AI interprets instruction | Returns element list |
+| `act()` | AI picks element | Fuzzy text matching |
+| `extract()` | Schema-based + AI | CSS selectors |
+| Use case | AI-autonomous browsing | Claude-assisted automation |
+
+**vif's approach**: Instead of paying for AI inference on every action, vif returns structured data that Claude (already running in Claude Code) can interpret. This is "Claude-in-the-loop" automation.
+
+## MCP Tools
+
+The browser automation is also available as MCP tools:
+
+- `vif_browser_launch` - Launch Chrome
+- `vif_browser_navigate` - Navigate to URL
+- `vif_browser_click` - Click element
+- `vif_browser_type` - Type text
+- `vif_browser_scroll` - Scroll page
+- `vif_browser_extract` - Extract data
+- `vif_browser_press` - Press key
+- `vif_browser_hover` - Hover over element
+- `vif_observe` - Get page elements
+- `vif_click_element` - Click by node ID
+- `vif_screenshot` - Take screenshot
+- `vif_browser_close` - Close browser
+
+See [MCP Tools](./mcp.md) for full documentation.
+
+---
+Generated by [Dewey](https://github.com/arach/dewey) | Last updated: 2026-01-18

@@ -1,0 +1,21 @@
+# vif
+
+> Screen capture and browser automation for macOS, designed for AI agents
+
+## Documentation
+
+- Overview: /docs/overview
+- Quickstart: /docs/quickstart
+- Browser Automation: /docs/browser
+
+## Overview
+
+**vif** is a screen capture and browser automation toolkit for macOS, designed specifically for AI agents and LLMs.
+
+## Quickstart
+
+Get up and running with vif in under 5 minutes.
+
+## Browser Automation
+
+vif provides Chrome automation via the Chrome DevTools Protocol (CDP). The API is inspired by Stagehand but runs locally without external AI inference costs.
