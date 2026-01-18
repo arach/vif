@@ -1215,5 +1215,20 @@ export * from './server.js';
 // Export agent client (native overlays)
 export * from './agent-client.js';
 
+// Export CDP browser automation (namespace to avoid conflicts)
+export * as cdp from './cdp/index.js';
+
+// Export Vif browser class (Stagehand-style API)
+export { Vif, createVif } from './browser.js';
+export type { VifOptions, ObserveOptions, ObserveResult, ActOptions, TypeOptions, ScrollOptions, ExtractOptions, ScreenshotOptions as BrowserScreenshotOptions } from './browser.js';
+
+// Export Stagehand adapter
+export { StagehandAdapter, createStagehandAdapter, createWithStagehand } from './stagehand-adapter.js';
+export type { StagehandOptions, ModelProvider, InferenceFunction, InferenceParams, InferenceResult, ElementInfo } from './stagehand-adapter.js';
+
+// Export Stagehand prompt spy
+export { StagehandSpy, createStagehandSpy, runPromptCapture } from './stagehand-spy.js';
+export type { CapturedPrompt, ResponseMode, SpyOptions } from './stagehand-spy.js';
+
 // Export types
 export type { ChildProcess };

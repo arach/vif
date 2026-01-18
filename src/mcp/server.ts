@@ -13,6 +13,7 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import WebSocket from 'ws';
+import { browserTools, handleBrowserTool, isBrowserTool } from './tools/browser.js';
 
 // WebSocket connection to vif server
 let ws: WebSocket | null = null;
@@ -234,6 +235,8 @@ const tools: Tool[] = [
     description: 'Hide the typer overlay',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
+  // Browser automation tools
+  ...browserTools,
 ];
 
 // Tool handlers
@@ -316,6 +319,10 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
       return 'Typer hidden';
 
     default:
+      // Check if it's a browser tool
+      if (isBrowserTool(name)) {
+        return await handleBrowserTool(name, args);
+      }
       throw new Error(`Unknown tool: ${name}`);
   }
 }
