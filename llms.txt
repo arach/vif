@@ -7,6 +7,8 @@
 - Overview: /docs/overview
 - Quickstart: /docs/quickstart
 - Browser Automation: /docs/browser
+- Scene DSL: /docs/scenes
+- MCP Tools: /docs/mcp
 
 ## Overview
 
@@ -19,3 +21,11 @@ Get up and running with vif in under 5 minutes.
 ## Browser Automation
 
 vif provides Chrome automation via the Chrome DevTools Protocol (CDP). The API is inspired by Stagehand but runs locally without external AI inference costs.
+
+## Scene DSL
+
+Define demo sequences declaratively in YAML. Scenes automate cursor movement, clicks, typing, overlays, and recording.
+
+## MCP Tools
+
+vif exposes all its capabilities as MCP (Model Context Protocol) tools, allowing Claude Code to control screen capture, overlays, and browser automation directly.

@@ -37,6 +37,6 @@ export default {
   docs: {
     path: './docs',
     output: './',
-    required: ['overview', 'quickstart', 'browser'],
+    required: ['overview', 'quickstart', 'browser', 'scenes', 'mcp'],
   },
 }

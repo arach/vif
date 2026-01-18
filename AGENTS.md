@@ -543,5 +543,594 @@ The browser automation is also available as MCP tools:
 
 See [MCP Tools](./mcp.md) for full documentation.
 
+## Scene DSL
+
+> Declarative demo automation with YAML scenes
+
+# Scene DSL
+
+Define demo sequences declaratively in YAML. Scenes automate cursor movement, clicks, typing, overlays, and recording.
+
+## Quick Example
+
+```yaml
+scene:
+  name: My App Demo
+  mode: draft    # 'draft' = overwrite ~/.vif/draft.mp4, 'final' = timestamped
+
+app:
+  name: Safari
+  window:
+    width: 1200
+    height: 800
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+sequence:
+  - wait: 500ms
+  - record: start
+  - cursor.show: {}
+  - cursor.moveTo: { x: 500, y: 300, duration: 0.3 }
+  - cursor.click: {}
+  - label.show: "Welcome to the demo"
+  - wait: 2s
+  - record: stop
+```
+
+Run with:
+```bash
+vif play demo.yaml              # Execute scene
+vif play --validate demo.yaml   # Validate without running
+vif play --watch demo.yaml      # Re-run on file changes
+vif play --verbose demo.yaml    # Show detailed logging
+```
+
+## Scene Structure
+
+### `scene` - Metadata
+
+```yaml
+scene:
+  name: Demo Name           # Display name
+  mode: draft               # draft | final
+  output: my-recording      # Custom output filename (final mode only)
+```
+
+### `app` - Target Application
+
+```yaml
+app:
+  name: Safari              # macOS app name
+  window:
+    width: 1200             # Desired window width
+    height: 800             # Desired window height
+```
+
+The app window will be centered on screen at the specified size.
+
+### `stage` - Visual Setup
+
+```yaml
+stage:
+  backdrop: true            # Dim everything outside viewport
+  viewport:
+    padding: 10             # Padding around app window
+```
+
+## Actions
+
+### Cursor Actions
+
+```yaml
+# Show/hide cursor overlay
+- cursor.show: {}
+- cursor.hide: {}
+
+# Move cursor (coordinates relative to app window)
+- cursor.moveTo: { x: 500, y: 300, duration: 0.3 }
+
+# Click at current position
+- cursor.click: {}
+
+# Combined click action
+- click: { x: 500, y: 300 }
+- click: sidebar.home       # Named target (see Views)
+```
+
+### Timing
+
+```yaml
+- wait: 500ms
+- wait: 2s
+- wait: 1.5s
+```
+
+### Recording
+
+```yaml
+- record: start
+# ... actions ...
+- record: stop
+```
+
+In `draft` mode, recording saves to `~/.vif/draft.mp4` (overwritten each run).
+In `final` mode, recordings are timestamped and saved to `~/.vif/recordings/`.
+
+### Labels
+
+```yaml
+# Show label at top/bottom of screen
+- label.show: "Welcome to the demo"
+- label.update: "New text"
+- label.hide: {}
+
+# With position
+- label:
+    text: "Caption here"
+    position: bottom
+```
+
+### Keyboard
+
+```yaml
+# Show keyboard shortcut overlay
+- keys.show:
+    keys: ["cmd", "shift", "p"]
+    press: true              # Animate keypress
+
+- keys.hide: {}
+
+# Actually press keys (sends to app)
+- input.keys: ["cmd", "c"]
+```
+
+### Typing
+
+```yaml
+# Visual typing overlay (doesn't send keys)
+- typer.type:
+    text: "Hello world"
+    style: default           # default | terminal | code
+    delay: 0.05              # Seconds between characters
+
+- typer.hide: {}
+
+# Actual keyboard typing (sends to app)
+- input.type:
+    text: "Hello world"
+    delay: 0.03
+```
+
+### Audio
+
+```yaml
+# Play audio through virtual microphone
+- voice.play: audio/intro.mp3
+- voice.play:
+    file: audio/intro.mp3
+    wait: true               # Wait for playback to finish
+
+- voice.stop: {}
+
+# Multi-channel audio
+- audio.play:
+    file: music/background.mp3
+    channel: 2
+    fadeIn: 1s
+    loop: true
+
+- audio.volume:
+    channel: 2
+    volume: 0.5
+    duration: 500ms
+
+- audio.stop:
+    channel: 2
+    fadeOut: 2s
+```
+
+### Navigation
+
+```yaml
+# Navigate through multiple items
+- navigate:
+    through: sidebar
+    items: [home, settings, profile]
+    wait: 400ms              # Wait between clicks
+```
+
+## Views
+
+Define reusable click targets within your scene:
+
+```yaml
+views:
+  sidebar:
+    region: { x: 0, width: 200 }
+    items:
+      - home: { y: 100 }
+      - settings: { y: 140 }
+      - profile: { y: 180 }
+
+  toolbar:
+    positions:
+      save: { x: 100, y: 50 }
+      undo: { x: 140, y: 50 }
+
+sequence:
+  - click: sidebar.home
+  - click: toolbar.save
+```
+
+## Labels Definition
+
+Define reusable labels:
+
+```yaml
+labels:
+  intro:
+    text: "Welcome to the demo"
+    position: top
+
+  outro:
+    text: "Thanks for watching!"
+    position: bottom
+
+sequence:
+  - label: intro
+  - wait: 2s
+  - label: outro
+```
+
+## VifTargets SDK Integration
+
+For first-party apps, integrate the VifTargets SDK to expose semantic targets:
+
+```swift
+// In your SwiftUI app
+Button("Submit") { ... }
+  .vifTarget("submit-btn")
+```
+
+Then reference in scenes:
+```yaml
+- click: submit-btn    # Resolved via SDK at runtime
+```
+
+The SDK exposes targets via HTTP on port 7851, which vif queries during scene execution.
+
+## Audio Configuration
+
+Configure multi-channel audio mixing:
+
+```yaml
+audio:
+  channels:
+    1:  # Voice channel
+      output: virtual-mic    # Route to BlackHole for app input
+      volume: 1.0
+    2:  # Music channel
+      output: post-mix       # Mix in post-processing
+      volume: 0.3
+
+sequence:
+  - audio.play:
+      file: voice/intro.mp3
+      channel: 1
+  - audio.play:
+      file: music/background.mp3
+      channel: 2
+      loop: true
+```
+
+## Full Example
+
+```yaml
+scene:
+  name: Talkie Demo
+  mode: draft
+
+app:
+  name: Talkie
+  window:
+    width: 1280
+    height: 800
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+views:
+  sidebar:
+    region: { x: 0, width: 200 }
+    items:
+      - voices: { y: 100 }
+      - settings: { y: 300 }
+
+labels:
+  intro:
+    text: "Welcome to Talkie"
+    position: top
+
+sequence:
+  - wait: 500ms
+  - record: start
+  - cursor.show: {}
+  - label: intro
+  - wait: 1s
+
+  - cursor.moveTo: { x: 400, y: 300, duration: 0.4 }
+  - cursor.click: {}
+
+  - input.type:
+      text: "Hello, this is a demo"
+      delay: 0.03
+
+  - keys.show:
+      keys: ["cmd", "return"]
+      press: true
+  - input.keys: ["cmd", "return"]
+  - wait: 500ms
+  - keys.hide: {}
+
+  - navigate:
+      through: sidebar
+      items: [voices, settings]
+      wait: 800ms
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - record: stop
+```
+
+## CLI Reference
+
+```bash
+vif play <scene.yaml>           # Run scene
+vif play --validate <scene>     # Validate only
+vif play --watch <scene>        # Watch for changes
+vif play --verbose <scene>      # Detailed logging
+vif play --dry-run <scene>      # Show actions without executing
+```
+
+## MCP Tools
+
+> Claude Code integration via Model Context Protocol
+
+# MCP Tools
+
+vif exposes all its capabilities as MCP (Model Context Protocol) tools, allowing Claude Code to control screen capture, overlays, and browser automation directly.
+
+## Setup
+
+Start the MCP server:
+```bash
+vif-mcp
+```
+
+Add to Claude Code's MCP configuration (`~/.claude/settings.json`):
+```json
+{
+  "mcpServers": {
+    "vif": {
+      "command": "vif-mcp"
+    }
+  }
+}
+```
+
+**Note:** Demo overlay tools require the vif server running (`vif serve`).
+
+## Tool Categories
+
+### Cursor Overlay Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_cursor_show` | Show the animated cursor overlay |
+| `vif_cursor_hide` | Hide the cursor overlay |
+| `vif_cursor_move` | Move cursor to position with animation |
+| `vif_cursor_click` | Perform click animation at current position |
+
+**Example:**
+```
+Claude, show the cursor at position 500, 300 and click
+```
+
+### Label/Caption Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_label_show` | Show a text label overlay |
+| `vif_label_update` | Update the label text |
+| `vif_label_hide` | Hide the label |
+
+**Parameters for `vif_label_show`:**
+- `text` (required): Text to display
+- `position`: "top" or "bottom" (default: "top")
+
+### Backdrop/Stage Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_backdrop_show` | Dim everything outside viewport |
+| `vif_backdrop_hide` | Remove backdrop dimming |
+| `vif_stage_center` | Center an app window on screen |
+| `vif_stage_clear` | Clear all overlays |
+
+**Parameters for `vif_stage_center`:**
+- `app` (required): App name (e.g., "Safari", "Finder")
+- `width`: Window width
+- `height`: Window height
+
+### Viewport Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_viewport_set` | Define the visible region |
+| `vif_viewport_show` | Show viewport mask |
+| `vif_viewport_hide` | Hide viewport mask |
+
+**Parameters for `vif_viewport_set`:**
+- `x`, `y`, `width`, `height` (all required)
+
+### Keyboard Overlay Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_keys_show` | Show keyboard shortcut overlay |
+| `vif_keys_hide` | Hide keyboard overlay |
+
+**Parameters for `vif_keys_show`:**
+- `keys` (required): Array of keys, e.g., `["cmd", "shift", "p"]`
+- `press`: Animate as keypress (boolean)
+
+### Typer Overlay Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_typer_type` | Show animated typing overlay |
+| `vif_typer_hide` | Hide typer overlay |
+
+**Parameters for `vif_typer_type`:**
+- `text` (required): Text to type
+- `style`: "default", "terminal", or "code"
+- `delay`: Seconds between characters (default: 0.05)
+
+### Recording Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_record_indicator` | Show/hide recording indicator |
+
+**Parameters:**
+- `show` (required): Boolean
+
+## Browser Automation Tools
+
+These tools control Chrome via CDP (Chrome DevTools Protocol).
+
+| Tool | Description |
+|------|-------------|
+| `vif_browser_launch` | Launch Chrome and connect |
+| `vif_browser_navigate` | Navigate to URL |
+| `vif_browser_click` | Click element by CSS selector |
+| `vif_browser_type` | Type text into element |
+| `vif_browser_scroll` | Scroll page or element |
+| `vif_browser_extract` | Extract data using selectors |
+| `vif_browser_press` | Press key or shortcut |
+| `vif_browser_hover` | Hover over element |
+| `vif_observe` | Get interactive elements on page |
+| `vif_click_element` | Click by node ID (from observe) |
+| `vif_screenshot` | Take browser screenshot |
+| `vif_browser_close` | Close browser connection |
+
+### Browser Tool Parameters
+
+**`vif_browser_launch`**
+- `url` (optional): Initial URL to navigate to
+- `headless` (optional): Run in headless mode
+
+**`vif_browser_navigate`**
+- `url` (required): URL to navigate to
+
+**`vif_browser_click`**
+- `selector` (required): CSS selector
+
+**`vif_browser_type`**
+- `selector` (required): CSS selector
+- `text` (required): Text to type
+- `clear` (optional): Clear existing text first
+- `delay` (optional): Delay between keystrokes (ms)
+
+**`vif_browser_scroll`**
+- `direction` (required): "up", "down", "left", or "right"
+- `amount` (optional): Pixels to scroll
+- `selector` (optional): Element to scroll
+
+**`vif_browser_extract`**
+- `selectors` (required): Object mapping names to CSS selectors
+  ```json
+  { "title": "h1", "links": "a.nav-link" }
+  ```
+
+**`vif_observe`**
+- `format` (optional): "clickable" (default), "accessibility", or "full"
+- `selector` (optional): Filter to specific selector
+
+**`vif_screenshot`**
+- `path` (optional): Save path
+- `fullPage` (optional): Capture full page
+- `selector` (optional): Capture specific element
+
+## Example Conversations
+
+### Demo Recording
+
+```
+User: Record a demo of our app's new feature
+
+Claude: I'll set up the stage and record. Let me:
+1. Center the app window
+2. Show the backdrop
+3. Record the demo with cursor and labels
+
+[Uses vif_stage_center, vif_backdrop_show, vif_cursor_show,
+vif_cursor_move, vif_cursor_click, vif_label_show, etc.]
+```
+
+### Web Scraping
+
+```
+User: Go to Hacker News and get the top 5 story titles
+
+Claude: I'll navigate to Hacker News and extract the titles.
+
+[Uses vif_browser_launch, vif_browser_navigate, vif_browser_extract]
+
+Here are the top 5 stories:
+1. Show HN: ...
+2. ...
+```
+
+### Automated Testing
+
+```
+User: Test the login flow on our staging site
+
+Claude: I'll test the login flow.
+
+[Uses vif_browser_launch with staging URL]
+[Uses vif_observe to find login form]
+[Uses vif_browser_type for email and password]
+[Uses vif_browser_click to submit]
+[Uses vif_screenshot to capture result]
+
+Login successful. Screenshot saved.
+```
+
+## Tool Availability
+
+| Tool Category | Requires `vif serve` | Requires Chrome |
+|--------------|---------------------|-----------------|
+| Cursor/Label/Stage | Yes | No |
+| Viewport/Backdrop | Yes | No |
+| Keys/Typer | Yes | No |
+| Browser tools | No | Yes |
+
+## Error Handling
+
+Tools return error messages when:
+- `vif serve` is not running (for overlay tools)
+- Chrome is not available (for browser tools)
+- Element not found (for click/type actions)
+- Navigation timeout
+
+Claude should handle these gracefully and inform the user.
+
 ---
 Generated by [Dewey](https://github.com/arach/dewey) | Last updated: 2026-01-18
