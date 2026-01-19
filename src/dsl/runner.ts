@@ -19,6 +19,8 @@ import {
 import { resolveTarget, TargetRegistry, queryAppTargets } from './targets.js';
 import { Recorder, RecordingRegion } from '../recorder/index.js';
 import { AudioManager } from '../audio-manager.js';
+import { hooks } from '../hooks/index.js';
+import type { RecordingOptions } from '../hooks/types.js';
 
 export interface RunnerOptions {
   port?: number;
@@ -342,6 +344,9 @@ export class SceneRunner {
   async run(): Promise<void> {
     console.log(`\n▶ Running scene: ${this.scene.scene.name}\n`);
 
+    // Call before-run hook
+    await hooks.callHook('scene:before-run', this.scene);
+
     // Clear previous events for clean validation
     if (this.options.validate) {
       await this.clearVifEvents();
@@ -359,9 +364,24 @@ export class SceneRunner {
       // Execute sequence with step tracking for timeline
       for (let i = 0; i < this.scene.sequence.length; i++) {
         const action = this.scene.sequence[i];
+
+        // Call action-before hook
+        await hooks.callHook('scene:action-before', action, i);
+
         // Emit step start event for timeline visualization
         this.send('timeline.step', { index: i }).catch(() => {});
-        await this.executeAction(action);
+
+        try {
+          await this.executeAction(action);
+
+          // Call action-after hook
+          await hooks.callHook('scene:action-after', action, i);
+        } catch (actionErr) {
+          // Call action-error hook
+          const error = actionErr instanceof Error ? actionErr : new Error(String(actionErr));
+          await hooks.callHook('scene:action-error', action, i, error);
+          throw actionErr;
+        }
       }
 
       // Cleanup
@@ -369,9 +389,16 @@ export class SceneRunner {
 
       console.log('\n✓ Scene complete');
 
+      // Call complete hook
+      await hooks.callHook('scene:complete', this.scene);
+
       // Print validation summary
       this.printValidationSummary();
     } catch (err) {
+      // Call scene error hook
+      const error = err instanceof Error ? err : new Error(String(err));
+      await hooks.callHook('scene:error', this.scene, error);
+
       // On error, run teardown to clean up everything we set up
       console.log('\n⚠ Error during scene execution, cleaning up...');
       try {
@@ -591,6 +618,10 @@ export class SceneRunner {
         const mode = this.scene.scene.mode || 'draft';
         const output = this.getOutputPath(mode, this.scene.scene.output);
 
+        // Call before-start hook
+        const recordingOptions: RecordingOptions = { mode, name: this.scene.scene.output, output };
+        await hooks.callHook('recording:before-start', recordingOptions);
+
         if (this.options.dryRun) {
           this.log(`🎬 [dry-run] Would start recording to ${output}`);
         } else {
@@ -608,8 +639,14 @@ export class SceneRunner {
             audio: false,
           });
           this.setupState.recording = true;
+
+          // Call started hook
+          await hooks.callHook('recording:started', output);
         }
       } else {
+        // Call before-stop hook
+        await hooks.callHook('recording:before-stop');
+
         if (this.options.dryRun) {
           this.log(`🎬 [dry-run] Would stop recording`);
         } else {
@@ -627,6 +664,7 @@ export class SceneRunner {
             return channel !== 1 || this.scene.audio?.channels?.[channel]?.output !== 'virtual-mic';
           });
 
+          let finalOutputPath = outputPath;
           if (hasPostAudio && outputPath) {
             // Mix audio in post-processing
             const finalPath = outputPath.replace(/\.(mp4|mov)$/, '-final.$1');
@@ -634,11 +672,17 @@ export class SceneRunner {
             const success = this.audioManager.renderFinalMix(outputPath, finalPath);
             if (success) {
               console.log(`📼 Recording saved: ${finalPath}`);
+              finalOutputPath = finalPath;
             } else {
               console.log(`📼 Recording saved (no audio mix): ${outputPath}`);
             }
           } else {
             console.log(`📼 Recording saved: ${outputPath}`);
+          }
+
+          // Call stopped hook
+          if (finalOutputPath) {
+            await hooks.callHook('recording:stopped', finalOutputPath);
           }
 
           // Reset audio manager for next recording

@@ -309,5 +309,14 @@ export * from './viewport.js';
 export * from './automation.js';
 export * from './server.js';
 export * from './agent-client.js';
+export { hooks, defineVifPlugin, registerPlugin, registerPlugins, createVifHooks, } from './hooks/index.js';
+export type { VifHooks, VifPlugin, VifHookable, RecordingOptions, CommandContext, } from './hooks/types.js';
+export * as cdp from './cdp/index.js';
+export { Vif, createVif } from './browser.js';
+export type { VifOptions, ObserveOptions, ObserveResult, ActOptions, TypeOptions, ScrollOptions, ExtractOptions, ScreenshotOptions as BrowserScreenshotOptions } from './browser.js';
+export { StagehandAdapter, createStagehandAdapter, createWithStagehand } from './stagehand-adapter.js';
+export type { StagehandOptions, ModelProvider, InferenceFunction, InferenceParams, InferenceResult, ElementInfo } from './stagehand-adapter.js';
+export { StagehandSpy, createStagehandSpy, runPromptCapture } from './stagehand-spy.js';
+export type { CapturedPrompt, ResponseMode, SpyOptions } from './stagehand-spy.js';
 export type { ChildProcess };
 //# sourceMappingURL=index.d.ts.map

@@ -16,6 +16,7 @@ import { EventEmitter } from 'events';
 import * as readline from 'readline';
 import { fileURLToPath } from 'url';
 import * as net from 'net';
+import { hooks } from './hooks/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,13 +83,25 @@ export class VifAgent extends EventEmitter {
    * Start the agent process
    */
   async start(): Promise<void> {
+    // Call before-start hook
+    await hooks.callHook('agent:before-start');
+
     const appBundle = VifAgent.findAppBundle();
 
-    if (this.useSocketMode && appBundle) {
-      return this.startSocketMode(appBundle);
-    } else {
-      // Fallback to legacy stdio mode
-      return this.startStdioMode();
+    try {
+      if (this.useSocketMode && appBundle) {
+        await this.startSocketMode(appBundle);
+      } else {
+        // Fallback to legacy stdio mode
+        await this.startStdioMode();
+      }
+
+      // Call ready hook after successful start
+      await hooks.callHook('agent:ready', this);
+    } catch (error) {
+      // Call error hook on failure
+      await hooks.callHook('agent:error', error instanceof Error ? error : new Error(String(error)));
+      throw error;
     }
   }
 
@@ -144,12 +157,14 @@ export class VifAgent extends EventEmitter {
 
       this.socket.on('error', (err) => {
         this.emit('error', err);
+        void hooks.callHook('agent:error', err);
         if (!this.ready) reject(err);
       });
 
       this.socket.on('close', () => {
         this.ready = false;
         this.emit('exit', 0);
+        void hooks.callHook('agent:disconnected');
       });
 
       setTimeout(() => {
@@ -212,12 +227,14 @@ export class VifAgent extends EventEmitter {
 
       process.on('error', (err) => {
         this.emit('error', err);
+        void hooks.callHook('agent:error', err);
         reject(err);
       });
 
       process.on('exit', (code) => {
         this.ready = false;
         this.emit('exit', code);
+        void hooks.callHook('agent:disconnected');
       });
 
       // Store process for sending commands
@@ -273,7 +290,7 @@ export class VifAgent extends EventEmitter {
    */
   stop(): void {
     this.send({ action: 'quit' }).catch(() => {});
-    setTimeout(() => {
+    setTimeout(async () => {
       if (this.socket) {
         this.socket.destroy();
         this.socket = null;
@@ -282,6 +299,8 @@ export class VifAgent extends EventEmitter {
         (this as any)._process.kill();
         (this as any)._process = null;
       }
+      // Call disconnected hook
+      await hooks.callHook('agent:disconnected');
     }, 100);
   }
 

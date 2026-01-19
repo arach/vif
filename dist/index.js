@@ -877,4 +877,14 @@ export * from './automation.js';
 export * from './server.js';
 // Export agent client (native overlays)
 export * from './agent-client.js';
+// Export hooks system
+export { hooks, defineVifPlugin, registerPlugin, registerPlugins, createVifHooks, } from './hooks/index.js';
+// Export CDP browser automation (namespace to avoid conflicts)
+export * as cdp from './cdp/index.js';
+// Export Vif browser class (Stagehand-style API)
+export { Vif, createVif } from './browser.js';
+// Export Stagehand adapter
+export { StagehandAdapter, createStagehandAdapter, createWithStagehand } from './stagehand-adapter.js';
+// Export Stagehand prompt spy
+export { StagehandSpy, createStagehandSpy, runPromptCapture } from './stagehand-spy.js';
 //# sourceMappingURL=index.js.map

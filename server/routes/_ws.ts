@@ -18,6 +18,8 @@
  */
 import { defineWebSocketHandler } from 'h3'
 import { getAgent, isAgentAvailable } from '~/utils/agent'
+import { hooks } from '../../src/hooks/index.js'
+import type { CommandContext } from '../../src/hooks/types.js'
 
 interface Command {
   id?: number
@@ -69,6 +71,13 @@ export default defineWebSocketHandler({
 
 async function handleCommand(cmd: Command): Promise<Response> {
   const { id, action } = cmd
+
+  // Create command context for hooks
+  const { id: _id, action: _action, ...cmdParams } = cmd
+  const context: CommandContext = { action, params: cmdParams, id }
+
+  // Call before hook
+  await hooks.callHook('command:before', context)
 
   try {
     const agent = await getAgent()
@@ -217,7 +226,9 @@ async function handleCommand(cmd: Command): Promise<Response> {
         return { id, ok: false, error: `Unknown action: ${action}` }
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return { id, ok: false, error: message }
+    const err = error instanceof Error ? error : new Error('Unknown error')
+    // Call error hook
+    await hooks.callHook('command:error', context, err)
+    return { id, ok: false, error: err.message }
   }
 }

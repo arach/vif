@@ -1215,6 +1215,22 @@ export * from './server.js';
 // Export agent client (native overlays)
 export * from './agent-client.js';
 
+// Export hooks system
+export {
+  hooks,
+  defineVifPlugin,
+  registerPlugin,
+  registerPlugins,
+  createVifHooks,
+} from './hooks/index.js';
+export type {
+  VifHooks,
+  VifPlugin,
+  VifHookable,
+  RecordingOptions,
+  CommandContext,
+} from './hooks/types.js';
+
 // Export CDP browser automation (namespace to avoid conflicts)
 export * as cdp from './cdp/index.js';
 

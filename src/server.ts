@@ -66,6 +66,8 @@ import { join, resolve, extname } from 'path';
 import { homedir } from 'os';
 import { VifAgent } from './agent-client.js';
 import { runScene } from './dsl/index.js';
+import { hooks } from './hooks/index.js';
+import type { CommandContext } from './hooks/types.js';
 
 // ============================================================================
 // Types
@@ -121,6 +123,9 @@ export class JsonRpcServer {
    * Start the WebSocket server and vif-agent
    */
   async start(): Promise<void> {
+    // Call before-start hook
+    await hooks.callHook('server:before-start');
+
     // Start vif-agent first
     this.log('Starting vif-agent...');
     this.agent = new VifAgent();
@@ -172,6 +177,9 @@ export class JsonRpcServer {
 
     // Start HTTP server for video streaming
     await this.startHttpServer();
+
+    // Call started hook
+    await hooks.callHook('server:started', this.options.port);
   }
 
   /**
@@ -336,6 +344,9 @@ export class JsonRpcServer {
    * Stop the server
    */
   async stop(): Promise<void> {
+    // Call before-stop hook
+    await hooks.callHook('server:before-stop');
+
     // Stop agent
     if (this.agent) {
       this.agent.stop();
@@ -343,19 +354,20 @@ export class JsonRpcServer {
     }
 
     // Close WebSocket server
-    return new Promise((resolve) => {
-      if (this.wss) {
-        for (const client of this.clients) {
-          client.close();
-        }
-        this.wss.close(() => {
+    if (this.wss) {
+      for (const client of this.clients) {
+        client.close();
+      }
+      await new Promise<void>((resolve) => {
+        this.wss!.close(() => {
           this.log('Server stopped');
           resolve();
         });
-      } else {
-        resolve();
-      }
-    });
+      });
+    }
+
+    // Call stopped hook
+    await hooks.callHook('server:stopped');
   }
 
   /**
@@ -419,6 +431,13 @@ export class JsonRpcServer {
     if (!this.agent && !['ping'].includes(action)) {
       return { id, ok: false, error: 'vif-agent not available' };
     }
+
+    // Create command context for hooks
+    const { id: _id, action: _action, ...cmdParams } = cmd;
+    const context: CommandContext = { action, params: cmdParams, id };
+
+    // Call before hook
+    await hooks.callHook('command:before', context);
 
     try {
       // Handle timeline actions (don't require agent)
@@ -559,14 +578,19 @@ export class JsonRpcServer {
           return { id, ok: true, message: 'Server shutting down' };
         }
 
-        default:
-          return { id, ok: false, error: `Unknown action: ${action}` };
+        default: {
+          const errorResult = { id, ok: false, error: `Unknown action: ${action}` };
+          return errorResult;
+        }
       }
     } catch (err) {
+      const error = err instanceof Error ? err : new Error('Command failed');
+      // Call error hook
+      await hooks.callHook('command:error', context, error);
       return {
         id,
         ok: false,
-        error: err instanceof Error ? err.message : 'Command failed',
+        error: error.message,
       };
     }
   }
