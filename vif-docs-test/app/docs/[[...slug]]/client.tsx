@@ -4,14 +4,14 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 
-// Dynamically import DocsApp to avoid SSR issues
+// Dynamically import DocsApp to avoid SSR issues (bundle uses document at module level)
 const DocsApp = dynamic(
-  () => import('@arach/dewey').then(mod => mod.DocsApp),
+  () => import('@arach/dewey/react').then(mod => mod.DocsApp),
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-slate-500">Loading docs...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#fffcf9]">
+        <div className="text-stone-400">Loading...</div>
       </div>
     )
   }
@@ -19,20 +19,43 @@ const DocsApp = dynamic(
 
 const navigation = [
   {
-    title: 'Getting Started',
-    items: [
-      { id: 'overview', title: 'Overview' },
-      { id: 'quickstart', title: 'Quickstart' },
-    ],
+    "title": "Getting Started",
+    "items": [
+      {
+        "id": "overview",
+        "title": "Overview"
+      },
+      {
+        "id": "quickstart",
+        "title": "Quickstart"
+      },
+      {
+        "id": "browser",
+        "title": "Browser Automation"
+      },
+      {
+        "id": "scenes",
+        "title": "Scene DSL"
+      },
+      {
+        "id": "mcp",
+        "title": "MCP Tools"
+      }
+    ]
   },
   {
-    title: 'Features',
-    items: [
-      { id: 'browser', title: 'Browser Automation' },
-      { id: 'scenes', title: 'Scene DSL' },
-      { id: 'mcp', title: 'MCP Tools' },
-    ],
-  },
+    "title": "Reference",
+    "items": [
+      {
+        "id": "audio",
+        "title": "Audio"
+      },
+      {
+        "id": "talkie-integration",
+        "title": "Talkie-integration"
+      }
+    ]
+  }
 ]
 
 // Custom Link component for Next.js
@@ -60,7 +83,7 @@ export default function DocsClientPage({ docs, initialPage }: DocsClientPageProp
     <DocsApp
       config={{
         name: 'vif',
-        tagline: 'Screen capture & browser automation for macOS',
+        tagline: 'Documentation',
         basePath: '/docs',
         homeUrl: '/',
         navigation,

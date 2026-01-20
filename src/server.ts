@@ -627,6 +627,8 @@ export class JsonRpcServer {
         return this.handleVideosCommand(id, method, cmd);
       case 'sfx':
         return this.handleSfxCommand(id, method, cmd);
+      case 'camera':
+        return this.handleCameraCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
     }
@@ -1304,6 +1306,43 @@ export class JsonRpcServer {
     }
 
     return categories.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // ─── Camera Commands ───────────────────────────────────────────────────────
+
+  private async handleCameraCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'show': {
+        const position = cmd.position as string | undefined;
+        const size = cmd.size as string | number | undefined;
+        await this.agent!.cameraShow({ position, size });
+        return { id, ok: true };
+      }
+
+      case 'hide':
+        await this.agent!.cameraHide();
+        return { id, ok: true };
+
+      case 'set': {
+        const position = cmd.position as string | undefined;
+        const size = cmd.size as string | number | undefined;
+        await this.agent!.cameraSet({ position, size });
+        return { id, ok: true };
+      }
+
+      case 'viewport': {
+        // Update camera's viewport reference for smart positioning
+        const { x, y, width, height } = cmd;
+        if (typeof x === 'number' && typeof y === 'number' &&
+            typeof width === 'number' && typeof height === 'number') {
+          await this.agent!.cameraViewport(x, y, width, height);
+        }
+        return { id, ok: true };
+      }
+
+      default:
+        return { id, ok: false, error: `Unknown camera method: ${method}` };
+    }
   }
 
   private send(ws: WebSocket, data: Response | ServerEvent): void {

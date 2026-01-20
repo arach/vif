@@ -7,6 +7,7 @@ const config: Config = {
     "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
     "*.{js,ts,jsx,tsx,mdx}",
+    "./node_modules/@arach/dewey/dist/**/*.js",
   ],
   theme: {
     extend: {

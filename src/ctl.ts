@@ -22,6 +22,9 @@
  *   vif-ctl typer hide
  *   vif-ctl panel show|hide
  *   vif-ctl panel headless on|off
+ *   vif-ctl camera show [--position pos] [--size size]
+ *   vif-ctl camera hide
+ *   vif-ctl camera set [--position pos] [--size size]
  *   vif-ctl raw '{"action": "...", ...}'
  */
 
@@ -84,6 +87,9 @@ Commands:
   typer hide
   panel show|hide
   panel headless on|off
+  camera show [--position pos] [--size size]
+  camera hide
+  camera set [--position pos] [--size size]
   raw '<json>'`);
     process.exit(0);
   }
@@ -151,6 +157,7 @@ Commands:
             await send('viewport.hide');
             await send('keys.hide');
             await send('typer.hide');
+            await send('camera.hide');
             result = { ok: true };
             break;
           default:
@@ -218,6 +225,47 @@ Commands:
             break;
           default:
             throw new Error(`Unknown panel command: ${cmd}`);
+        }
+        break;
+
+      case 'camera':
+        switch (cmd) {
+          case 'show': {
+            const params: Record<string, unknown> = {};
+            // Parse --position and --size flags
+            for (let i = 0; i < rest.length; i++) {
+              if (rest[i] === '--position' && rest[i + 1]) {
+                params.position = rest[i + 1];
+                i++;
+              } else if (rest[i] === '--size' && rest[i + 1]) {
+                const size = rest[i + 1];
+                params.size = isNaN(Number(size)) ? size : Number(size);
+                i++;
+              }
+            }
+            result = await send('camera.show', params);
+            break;
+          }
+          case 'hide':
+            result = await send('camera.hide');
+            break;
+          case 'set': {
+            const setParams: Record<string, unknown> = {};
+            for (let i = 0; i < rest.length; i++) {
+              if (rest[i] === '--position' && rest[i + 1]) {
+                setParams.position = rest[i + 1];
+                i++;
+              } else if (rest[i] === '--size' && rest[i + 1]) {
+                const size = rest[i + 1];
+                setParams.size = isNaN(Number(size)) ? size : Number(size);
+                i++;
+              }
+            }
+            result = await send('camera.set', setParams);
+            break;
+          }
+          default:
+            throw new Error(`Unknown camera command: ${cmd}`);
         }
         break;
 

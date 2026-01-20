@@ -1,0 +1,1 @@
+{"name":"spy-test","type":"module","dependencies":{"@browserbasehq/stagehand":"^3.0.7"},"devDependencies":{"tsx":"^4.21.0","typescript":"^5.9.3"}}

@@ -235,6 +235,37 @@ const tools: Tool[] = [
     description: 'Hide the typer overlay',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
+
+  // Camera overlay tools
+  {
+    name: 'vif_camera_show',
+    description: 'Show camera overlay with optional position and size',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        position: { type: 'string', enum: ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'auto'], description: 'Position (default auto)' },
+        size: { type: ['string', 'number'], description: 'Size: small, medium, large, or number for pixels' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'vif_camera_hide',
+    description: 'Hide camera overlay',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'vif_camera_set',
+    description: 'Update camera position/size without hide/show',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        position: { type: 'string', enum: ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'auto'], description: 'Position' },
+        size: { type: ['string', 'number'], description: 'Size: small, medium, large, or number for pixels' },
+      },
+      required: [],
+    },
+  },
   // Browser automation tools
   ...browserTools,
 ];
@@ -317,6 +348,17 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
     case 'vif_typer_hide':
       await send('typer.hide');
       return 'Typer hidden';
+
+    // Camera overlay
+    case 'vif_camera_show':
+      await send('camera.show', { position: args.position, size: args.size });
+      return 'Camera overlay shown';
+    case 'vif_camera_hide':
+      await send('camera.hide');
+      return 'Camera overlay hidden';
+    case 'vif_camera_set':
+      await send('camera.set', { position: args.position, size: args.size });
+      return 'Camera overlay updated';
 
     default:
       // Check if it's a browser tool

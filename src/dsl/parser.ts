@@ -14,6 +14,11 @@ export interface Scene {
   name: string;
   output?: string;
   mode?: 'draft' | 'final';
+  presenter?: {
+    enabled?: boolean;
+    position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'auto';
+    size?: 'small' | 'medium' | 'large' | number;
+  };
 }
 
 export interface App {
@@ -93,6 +98,11 @@ export interface InputKeysAction { 'input.keys': string[] }
 // Voice actions (audio playback through virtual mic)
 export interface VoicePlayAction { 'voice.play': { file: string; wait?: boolean } | string }
 export interface VoiceStopAction { 'voice.stop': true | {} }
+
+// Camera/Presenter actions
+export interface CameraShowAction { 'camera.show': { position?: string; size?: string | number } | true | {} }
+export interface CameraHideAction { 'camera.hide': true | {} }
+export interface CameraSetAction { 'camera.set': { position?: string; size?: string | number } }
 
 // ─── Multi-Channel Audio System ──────────────────────────────────────────────
 
@@ -174,7 +184,10 @@ export type Action =
   | VoiceStopAction
   | AudioPlayAction
   | AudioStopAction
-  | AudioVolumeAction;
+  | AudioVolumeAction
+  | CameraShowAction
+  | CameraHideAction
+  | CameraSetAction;
 
 export interface SceneFile {
   scene: Scene;

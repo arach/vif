@@ -532,6 +532,24 @@ export class VifAgent extends EventEmitter {
   async timelineReset(): Promise<void> {
     await this.send({ action: 'timeline.reset' });
   }
+
+  // ─── Camera Commands (Presenter Facecam Overlay) ───────────────────────────
+
+  async cameraShow(options?: { position?: string; size?: string | number }): Promise<void> {
+    await this.send({ action: 'camera.show', ...options });
+  }
+
+  async cameraHide(): Promise<void> {
+    await this.send({ action: 'camera.hide' });
+  }
+
+  async cameraSet(options: { position?: string; size?: string | number }): Promise<void> {
+    await this.send({ action: 'camera.set', ...options });
+  }
+
+  async cameraViewport(x: number, y: number, width: number, height: number): Promise<void> {
+    await this.send({ action: 'camera.viewport', x, y, width, height });
+  }
 }
 
 // Singleton instance for convenience

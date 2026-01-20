@@ -1,0 +1,21 @@
+/* Reset any conflicting styles for docs pages */
+html, body {
+  height: 100%;
+  overflow: auto;
+}
+
+/* Ensure dewey header stays at top */
+nav[class*="fixed"][class*="z-50"] {
+  position: fixed !important;
+  top: 0 !important;
+  bottom: auto !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+/* Ensure proper root styling for docs */
+.dw-root,
+[class*="min-h-screen"] {
+  min-height: 100vh;
+  position: relative;
+}

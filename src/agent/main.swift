@@ -754,6 +754,262 @@ class LabelWindow: NSWindow {
     }
 }
 
+// MARK: - Camera Window (presenter facecam overlay)
+
+class CameraWindow: NSWindow {
+    let previewLayer: AVCaptureVideoPreviewLayer
+    let captureSession = AVCaptureSession()
+    var currentPosition: String = "bottom-right"  // top-left, top-right, bottom-left, bottom-right, auto
+    var currentSize: CGFloat = 150  // diameter in points
+    private var viewportRect: NSRect = .zero  // Track viewport for smart positioning
+
+    private lazy var containerView: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.masksToBounds = true
+        return view
+    }()
+
+    init() {
+        // Create preview layer first
+        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        previewLayer.videoGravity = .resizeAspectFill
+
+        // Default size
+        let size: CGFloat = 150
+        let frame = NSRect(x: 0, y: 0, width: size, height: size)
+
+        super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)  // Above everything
+        ignoresMouseEvents = true
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        // Set up container view with circular mask
+        containerView.frame = NSRect(x: 0, y: 0, width: size, height: size)
+        contentView = containerView
+
+        // Add preview layer to container
+        previewLayer.frame = containerView.bounds
+        containerView.layer?.addSublayer(previewLayer)
+
+        // Make it circular
+        containerView.layer?.cornerRadius = size / 2
+
+        // Add border
+        containerView.layer?.borderColor = NSColor.white.cgColor
+        containerView.layer?.borderWidth = 3
+
+        // Shadow
+        containerView.layer?.shadowColor = NSColor.black.cgColor
+        containerView.layer?.shadowOpacity = 0.5
+        containerView.layer?.shadowOffset = CGSize(width: 0, height: -2)
+        containerView.layer?.shadowRadius = 10
+
+        // Position at bottom-right by default
+        updatePosition()
+
+        alphaValue = 0
+    }
+
+    func setupCamera() -> Bool {
+        // Check camera permission
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            break
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                if granted {
+                    DispatchQueue.main.async {
+                        _ = self.setupCamera()
+                    }
+                }
+            }
+            return false
+        case .denied, .restricted:
+            fputs("[camera] camera permission denied\n", stderr)
+            return false
+        @unknown default:
+            return false
+        }
+
+        // Get default video device
+        guard let device = AVCaptureDevice.default(for: .video) else {
+            fputs("[camera] no camera device found\n", stderr)
+            return false
+        }
+
+        do {
+            let input = try AVCaptureDeviceInput(device: device)
+
+            captureSession.beginConfiguration()
+
+            if captureSession.canAddInput(input) {
+                captureSession.addInput(input)
+            }
+
+            // Use medium preset for preview (720p)
+            if captureSession.canSetSessionPreset(.medium) {
+                captureSession.sessionPreset = .medium
+            }
+
+            captureSession.commitConfiguration()
+
+            fputs("[camera] camera setup complete: \(device.localizedName)\n", stderr)
+            return true
+        } catch {
+            fputs("[camera] failed to setup camera: \(error)\n", stderr)
+            return false
+        }
+    }
+
+    func showCamera() {
+        // Setup camera if not already
+        if captureSession.inputs.isEmpty {
+            if !setupCamera() {
+                fputs("[camera] failed to setup camera for showing\n", stderr)
+                return
+            }
+        }
+
+        // Start capture session on background thread
+        if !captureSession.isRunning {
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.captureSession.startRunning()
+            }
+        }
+
+        updatePosition()
+        orderFrontRegardless()
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            animator().alphaValue = 1.0
+        }
+
+        fputs("[camera] showing at \(currentPosition), size \(currentSize)\n", stderr)
+    }
+
+    func hideCamera() {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            animator().alphaValue = 0
+        }) {
+            self.orderOut(nil)
+            // Stop capture session to save resources
+            if self.captureSession.isRunning {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.captureSession.stopRunning()
+                }
+            }
+        }
+
+        fputs("[camera] hidden\n", stderr)
+    }
+
+    func setSize(_ size: CGFloat) {
+        currentSize = size
+
+        let frame = NSRect(x: 0, y: 0, width: size, height: size)
+        setContentSize(frame.size)
+        containerView.frame = NSRect(x: 0, y: 0, width: size, height: size)
+        previewLayer.frame = containerView.bounds
+        containerView.layer?.cornerRadius = size / 2
+
+        updatePosition()
+    }
+
+    func setPosition(_ position: String) {
+        currentPosition = position
+        updatePosition()
+    }
+
+    func setViewport(_ rect: NSRect) {
+        // Store viewport in vif coordinates (top-left origin)
+        viewportRect = rect
+        if currentPosition == "auto" {
+            updatePosition()
+        }
+    }
+
+    private func updatePosition() {
+        guard let screen = NSScreen.main else { return }
+
+        let padding: CGFloat = 30
+        let screenFrame = screen.frame
+
+        var x: CGFloat = 0
+        var y: CGFloat = 0  // Cocoa coords (bottom-left origin)
+
+        let position: String
+        if currentPosition == "auto" {
+            position = calculateSmartPosition(screenFrame: screenFrame)
+        } else {
+            position = currentPosition
+        }
+
+        switch position {
+        case "top-left":
+            x = padding
+            y = screenFrame.height - currentSize - padding
+        case "top-right":
+            x = screenFrame.width - currentSize - padding
+            y = screenFrame.height - currentSize - padding
+        case "bottom-left":
+            x = padding
+            y = padding
+        case "bottom-right":
+            x = screenFrame.width - currentSize - padding
+            y = padding
+        default:  // bottom-right as fallback
+            x = screenFrame.width - currentSize - padding
+            y = padding
+        }
+
+        setFrameOrigin(CGPoint(x: x, y: y))
+    }
+
+    /// Calculate smart position that avoids viewport overlap
+    private func calculateSmartPosition(screenFrame: NSRect) -> String {
+        // If no viewport set, default to bottom-right
+        guard viewportRect != .zero else {
+            return "bottom-right"
+        }
+
+        // Convert viewport to Cocoa coordinates (it's stored in vif coords: top-left origin)
+        let viewportCocoaY = screenFrame.height - viewportRect.origin.y - viewportRect.height
+        let viewportInCocoa = NSRect(
+            x: viewportRect.origin.x,
+            y: viewportCocoaY,
+            width: viewportRect.width,
+            height: viewportRect.height
+        )
+
+        // Calculate center of viewport
+        let viewportCenterX = viewportInCocoa.midX
+        let viewportCenterY = viewportInCocoa.midY
+        let screenCenterX = screenFrame.width / 2
+        let screenCenterY = screenFrame.height / 2
+
+        // Determine which corner is furthest from viewport center
+        // If viewport is in top-left quadrant, camera goes to bottom-right, etc.
+        let isViewportLeft = viewportCenterX < screenCenterX
+        let isViewportTop = viewportCenterY > screenCenterY
+
+        if isViewportLeft && isViewportTop {
+            return "bottom-right"
+        } else if !isViewportLeft && isViewportTop {
+            return "bottom-left"
+        } else if isViewportLeft && !isViewportTop {
+            return "top-right"
+        } else {
+            return "top-left"
+        }
+    }
+}
+
 // MARK: - Stage Utilities (clean recording environment)
 
 /// Saved state for restoration
@@ -2489,6 +2745,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
     lazy var recorder = ScreenRecorder()
     lazy var controlPanel = ControlPanelWindow()
     lazy var timelinePanel = TimelinePanelWindow()
+    lazy var cameraWindow = CameraWindow()
     var headlessMode = false  // When true, control panel stays hidden
     var useSocketMode = false  // When true, use Unix socket instead of stdio
     var socketPath = "/tmp/vif-agent.sock"
@@ -2636,6 +2893,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
         labelWindow.alphaValue = 0
         keysWindow.alphaValue = 0
         typerWindow.alphaValue = 0
+        cameraWindow.hideCamera()
         controlPanel.setOverlaysVisible(false)
         controlPanel.clearLayers()
     }
@@ -2647,7 +2905,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
                backdrop.alphaValue > 0 ||
                labelWindow.alphaValue > 0 ||
                keysWindow.alphaValue > 0 ||
-               typerWindow.alphaValue > 0
+               typerWindow.alphaValue > 0 ||
+               cameraWindow.alphaValue > 0
     }
 
     /// Update control panel visibility and state based on overlay state
@@ -2675,6 +2934,7 @@ class VifAgent: NSObject, NSApplicationDelegate {
             self.labelWindow.hideLabel()
             self.keysWindow.hideKeys()
             self.typerWindow.hideTyper()
+            self.cameraWindow.hideCamera()
             self.controlPanel.hidePanel()
 
             // Stop recording if active
@@ -2723,6 +2983,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
             handlePanel(cmd, json)
         case "timeline":
             handleTimeline(cmd, json)
+        case "camera":
+            handleCamera(cmd, json)
         default:
             if action == "quit" {
                 respond(["ok": true])
@@ -3128,6 +3390,77 @@ class VifAgent: NSObject, NSApplicationDelegate {
 
         default:
             respond(["ok": false, "error": "unknown timeline cmd: \(cmd)"])
+        }
+    }
+
+    // MARK: - Camera (Presenter Facecam Overlay)
+
+    func handleCamera(_ cmd: String, _ json: [String: Any]) {
+        switch cmd {
+        case "show":
+            // Parse options
+            if let position = json["position"] as? String {
+                cameraWindow.setPosition(position)
+            }
+            if let size = json["size"] as? NSNumber {
+                cameraWindow.setSize(CGFloat(size.doubleValue))
+            } else if let sizeStr = json["size"] as? String {
+                // Handle named sizes
+                let sizeValue: CGFloat
+                switch sizeStr {
+                case "small": sizeValue = 100
+                case "medium": sizeValue = 150
+                case "large": sizeValue = 200
+                default: sizeValue = 150
+                }
+                cameraWindow.setSize(sizeValue)
+            }
+            cameraWindow.showCamera()
+            controlPanel.updateLayer("camera", visible: true)
+            respond(["ok": true])
+
+        case "hide":
+            cameraWindow.hideCamera()
+            controlPanel.updateLayer("camera", visible: false)
+            respond(["ok": true])
+
+        case "set":
+            // Update position/size without hide/show cycle
+            if let position = json["position"] as? String {
+                cameraWindow.setPosition(position)
+            }
+            if let size = json["size"] as? NSNumber {
+                cameraWindow.setSize(CGFloat(size.doubleValue))
+            } else if let sizeStr = json["size"] as? String {
+                let sizeValue: CGFloat
+                switch sizeStr {
+                case "small": sizeValue = 100
+                case "medium": sizeValue = 150
+                case "large": sizeValue = 200
+                default: sizeValue = 150
+                }
+                cameraWindow.setSize(sizeValue)
+            }
+            respond(["ok": true])
+
+        case "viewport":
+            // Set viewport for smart positioning
+            if let x = json["x"] as? NSNumber,
+               let y = json["y"] as? NSNumber,
+               let width = json["width"] as? NSNumber,
+               let height = json["height"] as? NSNumber {
+                let rect = NSRect(
+                    x: CGFloat(x.doubleValue),
+                    y: CGFloat(y.doubleValue),
+                    width: CGFloat(width.doubleValue),
+                    height: CGFloat(height.doubleValue)
+                )
+                cameraWindow.setViewport(rect)
+            }
+            respond(["ok": true])
+
+        default:
+            respond(["ok": false, "error": "unknown camera cmd: \(cmd)"])
         }
     }
 

@@ -59,6 +59,7 @@ interface SetupState {
   labels: Set<string>;  // label IDs
   keys: boolean;
   typer: boolean;
+  camera: boolean;
 }
 
 export class SceneRunner {
@@ -90,6 +91,7 @@ export class SceneRunner {
     labels: new Set(),
     keys: false,
     typer: false,
+    camera: false,
   };
 
   constructor(scene: ParsedScene, options: RunnerOptions = {}) {
@@ -481,6 +483,9 @@ export class SceneRunner {
         await this.send('viewport.show');
         this.setupState.viewport = true;
 
+        // Sync viewport with camera
+        await this.send('camera.viewport', vp).catch(() => {});
+
         // Store viewport region for recorder
         this.viewportRegion = vp;
       }
@@ -495,6 +500,20 @@ export class SceneRunner {
       } catch {
         // App doesn't expose targets - that's ok
       }
+    }
+
+    // Auto-show camera if presenter is enabled in scene
+    if (this.scene.scene.presenter?.enabled) {
+      const cameraParams: Record<string, unknown> = {};
+      if (this.scene.scene.presenter.position) {
+        cameraParams.position = this.scene.scene.presenter.position;
+      }
+      if (this.scene.scene.presenter.size !== undefined) {
+        cameraParams.size = this.scene.scene.presenter.size;
+      }
+      await this.send('camera.show', cameraParams);
+      this.setupState.camera = true;
+      this.log(`📹 Camera enabled with presenter config`);
     }
   }
 
@@ -863,6 +882,31 @@ export class SceneRunner {
       return;
     }
 
+    // camera.show
+    if ('camera.show' in action) {
+      const showAction = action['camera.show'];
+      const params: Record<string, unknown> = (showAction && typeof showAction === 'object')
+        ? (showAction as Record<string, unknown>)
+        : {};
+      await this.send('camera.show', params);
+      this.setupState.camera = true;
+      return;
+    }
+
+    // camera.hide
+    if ('camera.hide' in action) {
+      await this.send('camera.hide');
+      this.setupState.camera = false;
+      return;
+    }
+
+    // camera.set
+    if ('camera.set' in action) {
+      const setAction = action['camera.set'];
+      await this.send('camera.set', setAction as Record<string, unknown>);
+      return;
+    }
+
     this.log('⚠ Unknown action:', action);
   }
 
@@ -1081,6 +1125,14 @@ export class SceneRunner {
         await this.send('cursor.hide');
       } catch { /* ignore */ }
       this.setupState.cursor = false;
+    }
+
+    // Hide camera
+    if (this.setupState.camera) {
+      try {
+        await this.send('camera.hide');
+      } catch { /* ignore */ }
+      this.setupState.camera = false;
     }
 
     // Hide viewport
