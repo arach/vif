@@ -550,6 +550,23 @@ export class VifAgent extends EventEmitter {
   async cameraViewport(x: number, y: number, width: number, height: number): Promise<void> {
     await this.send({ action: 'camera.viewport', x, y, width, height });
   }
+
+  // ─── Zoom Commands ─────────────────────────────────────────────────────────
+
+  async zoomStart(options: {
+    type?: 'crop' | 'lens';
+    level: number;
+    target?: 'cursor' | { x: number; y: number };
+    in?: { duration: number; easing?: string };
+    out?: { duration: number; easing?: string };
+    hold?: number | 'auto';
+  }): Promise<void> {
+    await this.send({ action: 'zoom.start', ...options });
+  }
+
+  async zoomReset(options?: { duration?: number; easing?: string }): Promise<void> {
+    await this.send({ action: 'zoom.reset', ...options });
+  }
 }
 
 // Singleton instance for convenience

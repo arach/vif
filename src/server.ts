@@ -629,8 +629,34 @@ export class JsonRpcServer {
         return this.handleSfxCommand(id, method, cmd);
       case 'camera':
         return this.handleCameraCommand(id, method, cmd);
+      case 'zoom':
+        return this.handleZoomCommand(id, method, cmd);
       default:
         return { id, ok: false, error: `Unknown domain: ${domain}` };
+    }
+  }
+
+  private async handleZoomCommand(id: number | undefined, method: string, cmd: Command): Promise<Response> {
+    switch (method) {
+      case 'start': {
+        const { type, level, target, in: zoomIn, out: zoomOut, hold } = cmd;
+        await this.agent!.zoomStart({
+          type: type as 'crop' | 'lens',
+          level: level as number,
+          target: target as 'cursor' | { x: number; y: number },
+          in: zoomIn as { duration: number; easing?: string },
+          out: zoomOut as { duration: number; easing?: string },
+          hold: hold as number | 'auto',
+        });
+        return { id, ok: true };
+      }
+      case 'reset': {
+        const { duration, easing } = cmd;
+        await this.agent!.zoomReset({ duration: duration as number, easing: easing as string });
+        return { id, ok: true };
+      }
+      default:
+        return { id, ok: false, error: `Unknown zoom method: ${method}` };
     }
   }
 

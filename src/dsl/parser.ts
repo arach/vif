@@ -104,6 +104,36 @@ export interface CameraShowAction { 'camera.show': { position?: string; size?: s
 export interface CameraHideAction { 'camera.hide': true | {} }
 export interface CameraSetAction { 'camera.set': { position?: string; size?: string | number } }
 
+// ─── Zoom Actions ────────────────────────────────────────────────────────────
+
+export type EasingType =
+  | 'linear'
+  | 'ease-in'
+  | 'ease-out'
+  | 'ease-in-out'
+  | 'spring';
+
+export interface ZoomTransition {
+  duration?: number | string;
+  easing?: EasingType;
+}
+
+export interface ZoomAction {
+  zoom: {
+    type?: 'crop' | 'lens';
+    level: number;
+    target?: 'cursor' | { x: number; y: number };
+    in?: ZoomTransition;
+    out?: ZoomTransition;
+    hold?: number | string | 'auto';
+    size?: number;
+    border?: boolean;
+    shadow?: boolean;
+  };
+}
+
+export interface ZoomResetAction { 'zoom.reset': true | { duration?: number | string; easing?: EasingType } }
+
 // ─── Multi-Channel Audio System ──────────────────────────────────────────────
 
 // Audio channel configuration
@@ -187,7 +217,9 @@ export type Action =
   | AudioVolumeAction
   | CameraShowAction
   | CameraHideAction
-  | CameraSetAction;
+  | CameraSetAction
+  | ZoomAction
+  | ZoomResetAction;
 
 export interface SceneFile {
   scene: Scene;

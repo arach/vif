@@ -907,6 +907,49 @@ export class SceneRunner {
       return;
     }
 
+    // zoom
+    if ('zoom' in action) {
+      const zoom = (action as any).zoom;
+      const inDuration = zoom.in?.duration
+        ? SceneParser.parseDuration(zoom.in.duration)
+        : 300;
+      const outDuration = zoom.out?.duration
+        ? SceneParser.parseDuration(zoom.out.duration)
+        : 400;
+      const holdDuration = zoom.hold === 'auto' || zoom.hold === undefined
+        ? 'auto'
+        : SceneParser.parseDuration(zoom.hold as string | number);
+
+      // Resolve target coordinates
+      let targetX: number | undefined;
+      let targetY: number | undefined;
+      if (zoom.target && typeof zoom.target === 'object' && 'x' in zoom.target) {
+        const coords = this.resolveCoordinates(zoom.target.x, zoom.target.y);
+        targetX = coords.x;
+        targetY = coords.y;
+      }
+
+      this.log(`🔍 Zoom ${zoom.level}x (${zoom.type || 'crop'})`);
+
+      await this.send('zoom.start', {
+        type: zoom.type || 'crop',
+        level: zoom.level,
+        target: zoom.target === 'cursor' ? 'cursor' : (targetX !== undefined ? { x: targetX, y: targetY } : 'cursor'),
+        in: { duration: inDuration, easing: zoom.in?.easing || 'ease-out' },
+        out: { duration: outDuration, easing: zoom.out?.easing || 'ease-in' },
+        hold: holdDuration,
+      });
+      return;
+    }
+
+    // zoom.reset
+    if ('zoom.reset' in action) {
+      const reset = (action as any)['zoom.reset'];
+      const duration = reset?.duration ? SceneParser.parseDuration(reset.duration) : 300;
+      await this.send('zoom.reset', { duration, easing: reset?.easing || 'ease-out' });
+      return;
+    }
+
     this.log('⚠ Unknown action:', action);
   }
 
