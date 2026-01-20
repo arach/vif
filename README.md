@@ -1,22 +1,57 @@
 # Vif
 
-**Declarative Screen Capture** — Agentic asset generation for macOS.
+**Demo Automation Toolkit** — Screen capture, browser automation, and visual overlays for macOS.
 
 ![Vif OG](landing/public/og-image.png)
 
-Screen capture built for AI agents and LLMs. Declarative scenes, CLI-native, everything is a file.
+Built for AI agents and LLMs. Declarative scenes, CLI-native, MCP-ready.
 
 ## Features
 
-- **Agent-First**: Designed for LLM tool use with predictable, parseable output
+- **Screen Capture**: Screenshots, video recording, GIF creation using native macOS tools
+- **Browser Automation**: Chrome automation via Chrome DevTools Protocol (CDP)
+- **Demo Overlays**: Animated cursor, keyboard shortcuts, labels, camera/presenter overlay
 - **Declarative Scenes**: Define demo sequences in YAML with the Scene DSL
-- **Agentic Control**: `vif-ctl` CLI and MCP server for AI agent integration
-- **Live Control Panel**: Expandable layer viewer showing active stage elements
+- **AI Agent Integration**: MCP server for Claude Code, predictable CLI output
+- **Live Control Panel**: Layer viewer showing active stage elements
 - **Headless Mode**: Full immersive recording without UI overlay
-- **Window Discovery**: Find windows by app name with precise window IDs
-- **Screenshot Capture**: Capture windows, regions, or fullscreen
-- **Video Recording**: Record screen with optional audio
-- **Video Processing**: Convert, optimize, and create GIFs (requires ffmpeg)
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Entry Points                             │
+├─────────────────┬─────────────────┬─────────────────────────┤
+│  vif            │  vif-ctl        │  vif-mcp                │
+│  Main CLI       │  Control CLI    │  MCP Server             │
+└────────┬────────┴────────┬────────┴────────┬────────────────┘
+         │                 │                  │
+         │  serve          │  WebSocket       │  MCP tools
+         ▼                 ▼                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│              WebSocket Server (ws://localhost:7850)          │
+│  - Spawns vif-agent on start                                │
+│  - Routes commands to agent via Unix socket                  │
+│  - HTTP server on :7852 for video streaming                  │
+└────────────────────────────┬────────────────────────────────┘
+                             │ Unix socket (/tmp/vif-agent.sock)
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                vif-agent (Swift macOS app)                   │
+│  - Overlay windows (cursor, label, keys, typer, camera)     │
+│  - Screen recording                                          │
+│  - Control panel UI                                          │
+│  - Requires Accessibility + Screen Recording permissions     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Ports
+
+| Port | Service |
+|------|---------|
+| 7850 | WebSocket server (main commands) |
+| 7851 | VifTargets SDK (app integrations) |
+| 7852 | HTTP video streaming |
 
 ## Installation
 
@@ -77,9 +112,89 @@ vif-ctl panel headless off             # Disable headless mode
 - `⇧⌘R` — Stop recording
 - `⇧⌘X` — Clear stage
 
-**MCP Server** for Claude and AI agents:
+**MCP Server** for Claude Code:
+
+Add to `~/.claude/claude_desktop_config.json` or `settings.json`:
+```json
+{
+  "mcpServers": {
+    "vif": {
+      "command": "vif-mcp"
+    }
+  }
+}
+```
+
+Available MCP tools:
+- `vif_cursor_show/hide/move/click` - Cursor overlay control
+- `vif_label_show/hide/update` - Label/caption overlays
+- `vif_camera_show/hide/set` - Presenter camera overlay
+- `vif_backdrop_show/hide` - Background dimming
+- `vif_viewport_set/show/hide` - Viewport masking
+- `vif_keys_show/hide` - Keyboard shortcut display
+- `vif_browser_*` - Chrome automation (launch, navigate, click, type, etc.)
+- `vif_observe` - Get interactive elements on page
+- `vif_screenshot` - Capture screenshots
+
+## Browser Automation
+
+Control Chrome via Chrome DevTools Protocol (CDP):
+
+```typescript
+import { createVif } from '@arach/vif'
+
+const vif = createVif()
+
+// Launch Chrome and navigate
+await vif.launch('https://example.com')
+
+// Find interactive elements on the page
+const elements = await vif.observe({ format: 'clickable-only' })
+
+// Click an element
+await vif.click('button.submit')
+
+// Type into an input
+await vif.type('input[name="email"]', 'user@example.com')
+
+// Extract data
+const data = await vif.extract({
+  title: 'h1',
+  links: 'a.nav-link'
+})
+
+await vif.close()
+```
+
+**CLI usage:**
 ```bash
-vif-mcp  # Start MCP server for native tool access
+# Via MCP tools when vif-mcp is running
+vif_browser_launch --url "https://example.com"
+vif_browser_click --selector "button.submit"
+vif_browser_type --text "Hello world"
+vif_observe --format clickable
+vif_screenshot
+```
+
+## Camera Overlay
+
+Show a presenter camera overlay during recordings:
+
+```bash
+vif-ctl camera show --position bottom-right --size 150
+vif-ctl camera set --position top-left --size large
+vif-ctl camera hide
+```
+
+**Positions:** `auto`, `top-left`, `top-right`, `bottom-left`, `bottom-right`
+**Sizes:** `small` (100px), `medium` (150px), `large` (200px), or a number
+
+In Scene DSL:
+```yaml
+sequence:
+  - camera.show: { position: bottom-right, size: medium }
+  - cursor.moveTo: { x: 500, y: 300 }
+  - camera.hide: {}
 ```
 
 ## Scenes
@@ -254,8 +369,9 @@ Grant these in **System Settings → Privacy & Security**:
 
 | Permission | Required For | How to Grant |
 |------------|--------------|--------------|
-| **Screen Recording** | Screenshots, video capture | Add Terminal (or your IDE) |
-| **Accessibility** | Mouse/keyboard automation | Add Terminal (or your IDE) |
+| **Screen Recording** | Screenshots, video capture | Add Terminal + Vif Agent |
+| **Accessibility** | Mouse/keyboard automation, overlays | Add Terminal + Vif Agent |
+| **Camera** | Presenter camera overlay | Add Vif Agent |
 
 ### Optional Setup
 
@@ -269,9 +385,65 @@ Then set BlackHole as your app's audio input device.
 ```bash
 vif check              # Check system capabilities
 vif windows            # Verify window discovery works
-vif serve &            # Start server (required for vif-ctl)
+vif serve              # Start server (required for vif-ctl)
+# In another terminal:
 vif-ctl cursor show    # Test automation
 ```
+
+## Troubleshooting
+
+**"Agent not running" error:**
+```bash
+# Kill stale processes
+pkill -f "vif-agent"
+pkill -f "node.*dist"
+rm -f /tmp/vif-agent.sock
+
+# Restart
+vif serve
+```
+
+**Camera not showing:**
+- Check System Settings > Privacy > Camera for "Vif Agent"
+
+**Overlays not visible:**
+- Check System Settings > Privacy > Accessibility for "Vif Agent"
+- Try pressing Escape to clear and re-show
+
+## Development
+
+```bash
+# Clone the repo
+git clone https://github.com/arach/vif
+cd vif
+
+# Install dependencies
+pnpm install
+
+# Build everything (TypeScript + Swift agent)
+pnpm build
+
+# Start the server
+vif serve
+# or: node dist/cli.js serve
+
+# In another terminal, test commands
+vif-ctl cursor show
+vif-ctl cursor move 500 300 0.5
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/cli.ts` | Main CLI entry (`vif` command) |
+| `src/ctl.ts` | Control CLI (`vif-ctl` command) |
+| `src/server.ts` | WebSocket server, routes to agent |
+| `src/agent-client.ts` | TypeScript client for vif-agent |
+| `src/agent/main.swift` | Swift agent (overlays, recording) |
+| `src/mcp/server.ts` | MCP server for Claude Code |
+| `src/dsl/parser.ts` | Scene YAML parser |
+| `src/dsl/runner.ts` | Scene executor |
 
 ## API Reference
 
