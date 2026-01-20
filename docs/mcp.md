@@ -81,6 +81,33 @@ Claude, show the cursor at position 500, 300 and click
 **Parameters for `vif_viewport_set`:**
 - `x`, `y`, `width`, `height` (all required)
 
+### Camera Overlay Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_camera_show` | Show presenter camera overlay |
+| `vif_camera_hide` | Hide camera overlay |
+| `vif_camera_set` | Update camera position/size |
+
+**Parameters for `vif_camera_show`:**
+- `position`: "auto", "top-left", "top-right", "bottom-left", "bottom-right"
+- `size`: "small", "medium", "large", or pixel number
+
+### Zoom Tools
+
+| Tool | Description |
+|------|-------------|
+| `vif_zoom_start` | Start zoom effect |
+| `vif_zoom_reset` | Reset zoom to normal |
+
+**Parameters for `vif_zoom_start`:**
+- `level` (required): Zoom magnification (e.g., 1.5 = 150%)
+- `target`: "cursor" or `{ x, y }` coordinates
+- `type`: "crop" or "lens"
+- `in`: `{ duration, easing }` for zoom-in animation
+- `out`: `{ duration, easing }` for zoom-out animation
+- `hold`: Duration to hold zoom, or "auto"
+
 ### Keyboard Overlay Tools
 
 | Tool | Description |

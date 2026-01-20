@@ -10,9 +10,11 @@ Built for AI agents and LLMs. Declarative scenes, CLI-native, MCP-ready.
 
 - **Screen Capture**: Screenshots, video recording, GIF creation using native macOS tools
 - **Browser Automation**: Chrome automation via Chrome DevTools Protocol (CDP)
-- **Demo Overlays**: Animated cursor, keyboard shortcuts, labels, camera/presenter overlay
+- **Demo Overlays**: Animated cursor, keyboard shortcuts, labels, camera/presenter overlay, zoom effects
 - **Declarative Scenes**: Define demo sequences in YAML with the Scene DSL
+- **Multi-Channel Audio**: Voice narration, background music, SFX with post-processing mix
 - **AI Agent Integration**: MCP server for Claude Code, predictable CLI output
+- **Hooks System**: Extensibility for plugins, telemetry, custom behaviors
 - **Live Control Panel**: Layer viewer showing active stage elements
 - **Headless Mode**: Full immersive recording without UI overlay
 
@@ -218,6 +220,11 @@ sequence:
   - cursor.show: {}
   - click: sidebar.home           # Click named target
   - click: { x: 500, y: 300 }     # Or explicit coordinates
+  - zoom:                         # Zoom effect
+      level: 1.5
+      target: cursor
+      hold: 2s
+  - zoom.reset: {}
   - input.type:
       text: "Hello world"
       delay: 0.03
@@ -432,18 +439,21 @@ vif-ctl cursor show
 vif-ctl cursor move 500 300 0.5
 ```
 
-### Key Files
+### Components
 
-| File | Purpose |
-|------|---------|
-| `src/cli.ts` | Main CLI entry (`vif` command) |
-| `src/ctl.ts` | Control CLI (`vif-ctl` command) |
-| `src/server.ts` | WebSocket server, routes to agent |
-| `src/agent-client.ts` | TypeScript client for vif-agent |
-| `src/agent/main.swift` | Swift agent (overlays, recording) |
-| `src/mcp/server.ts` | MCP server for Claude Code |
-| `src/dsl/parser.ts` | Scene YAML parser |
-| `src/dsl/runner.ts` | Scene executor |
+| Component | Files | Purpose |
+|-----------|-------|---------|
+| **CLI** | `src/cli.ts`, `src/ctl.ts` | Main `vif` and `vif-ctl` commands |
+| **Server** | `src/server.ts` | WebSocket server routing commands to agent |
+| **Agent Client** | `src/agent-client.ts` | TypeScript client for Swift agent |
+| **Swift Agent** | `src/agent/main.swift` | macOS app for overlays, recording, control panel |
+| **MCP Server** | `src/mcp/server.ts`, `src/mcp/tools/` | Claude Code integration via MCP |
+| **Scene DSL** | `src/dsl/parser.ts`, `src/dsl/runner.ts` | YAML scene parsing and execution |
+| **Browser** | `src/browser.ts`, `src/cdp/` | Chrome automation via CDP |
+| **Audio** | `src/audio-manager.ts`, `src/voice.ts` | Multi-channel audio, TTS, virtual mic |
+| **Hooks** | `src/hooks/` | Extensibility system for plugins |
+| **Screen Capture** | `src/index.ts`, `src/recorder/` | Screenshots, video recording, GIFs |
+| **Overlays** | `src/cursor.ts`, `src/viewport.ts` | Cursor, viewport, backdrop control |
 
 ## API Reference
 

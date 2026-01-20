@@ -38,6 +38,9 @@ Everything is designed to work with AI agents: predictable CLI output, MCP tools
 - Text labels/teleprompter
 - Viewport highlighting
 - Backdrop dimming
+- Camera/presenter overlay
+- Zoom effects (crop and lens styles)
+- Multi-channel audio with post-processing
 
 ### AI Agent Integration
 - MCP server for Claude Code (`vif-mcp`)

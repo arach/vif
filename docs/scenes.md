@@ -189,6 +189,38 @@ In `final` mode, recordings are timestamped and saved to `~/.vif/recordings/`.
     fadeOut: 2s
 ```
 
+### Camera (Presenter Overlay)
+
+```yaml
+# Show presenter camera
+- camera.show: { position: bottom-right, size: medium }
+
+# Update camera position/size
+- camera.set: { position: top-left, size: 150 }
+
+# Hide camera
+- camera.hide: {}
+```
+
+Positions: `auto`, `top-left`, `top-right`, `bottom-left`, `bottom-right`
+Sizes: `small` (100px), `medium` (150px), `large` (200px), or pixel number
+
+### Zoom Effects
+
+```yaml
+# Zoom into cursor position
+- zoom:
+    level: 1.5              # 1.5x magnification
+    target: cursor          # or { x: 500, y: 300 }
+    type: crop              # crop | lens
+    in: { duration: 300ms, easing: ease-out }
+    out: { duration: 400ms }
+    hold: 2s                # or 'auto' to hold until next action
+
+# Reset zoom
+- zoom.reset: { duration: 300ms }
+```
+
 ### Navigation
 
 ```yaml
