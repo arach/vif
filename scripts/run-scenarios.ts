@@ -213,6 +213,21 @@ async function main() {
   console.log(`  Failed: ${failed}`);
   console.log(`  Total:  ${results.length}`);
 
+  // List captured videos
+  const videos = results
+    .filter(r => r.passed && r.outputFile)
+    .map(r => r.outputFile!);
+
+  if (videos.length > 0) {
+    console.log();
+    console.log('Videos captured:');
+    for (const video of videos) {
+      const stats = statSync(video);
+      const sizeMB = (stats.size / 1_000_000).toFixed(1);
+      console.log(`  ${video} (${sizeMB} MB)`);
+    }
+  }
+
   process.exit(failed > 0 ? 1 : 0);
 }
 
