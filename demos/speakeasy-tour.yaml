@@ -1,0 +1,111 @@
+# SpeakEasy Full Tour Demo
+#
+# Tours all tabs using VifTargets SDK
+# Run: vif play demos/speakeasy-tour.yaml
+
+scene:
+  name: SpeakEasy Tour
+  mode: draft
+  presenter:
+    enabled: true
+    position: bottom-right
+    size: medium
+
+app:
+  name: SpeakEasy
+  targetOffset:
+    x: 30
+    y: 0
+
+stage:
+  backdrop: true
+
+labels:
+  intro:
+    text: "Welcome to SpeakEasy"
+    position: top
+
+  dashboard:
+    text: "Dashboard - Your voice synthesis hub"
+    position: top
+
+  openai:
+    text: "OpenAI - GPT-4 powered voice synthesis"
+    position: top
+
+  elevenlabs:
+    text: "ElevenLabs - Premium voice cloning"
+    position: top
+
+  cache:
+    text: "Cache - Manage cached audio files"
+    position: top
+
+  hud:
+    text: "HUD - Heads-up display for presentations"
+    position: top
+
+  system:
+    text: "System - Audio device configuration"
+    position: top
+
+  history:
+    text: "History - Recent synthesis jobs"
+    position: top
+
+  outro:
+    text: "SpeakEasy - Text-to-speech made simple"
+    position: top
+
+sequence:
+  - wait: 500ms
+  - record: start
+
+  # Intro
+  - cursor.show: {}
+  - label: intro
+  - wait: 2s
+
+  # Dashboard
+  - label: dashboard
+  - click: tab.dashboard
+  - wait: 2s
+
+  # OpenAI
+  - label: openai
+  - click: tab.openai
+  - wait: 2s
+
+  # ElevenLabs
+  - label: elevenlabs
+  - click: tab.elevenlabs
+  - wait: 2s
+
+  # Cache
+  - label: cache
+  - click: tab.cache
+  - wait: 2s
+
+  # HUD
+  - label: hud
+  - click: tab.hud
+  - wait: 2s
+
+  # System
+  - label: system
+  - click: tab.system
+  - wait: 2s
+
+  # History
+  - label: history
+  - click: tab.history
+  - wait: 2s
+
+  # Outro
+  - label: outro
+  - wait: 2s
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - camera.hide: {}
+  - record: stop

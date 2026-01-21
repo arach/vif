@@ -70,6 +70,7 @@ export class SceneRunner {
   private appBounds: { x: number; y: number; width: number; height: number } | null = null;
   private appTargets: TargetRegistry = {};
   private vifTargetsPort = 7851;  // VifTargets SDK port
+  private targetOffset: { x: number; y: number } = { x: 0, y: 0 };  // Offset for target coordinates
   private validationResults: ActionResult[] = [];
   private lastEventId: string | null = null;
 
@@ -330,8 +331,9 @@ export class SceneRunner {
     const vifDir = join(homedir(), '.vif');
 
     if (mode === 'draft') {
-      // Draft mode: overwrite ~/.vif/draft.mp4
-      return join(vifDir, 'draft.mp4');
+      // Draft mode: use custom name if provided, otherwise draft.mp4
+      const filename = name ? `${name}.mp4` : 'draft.mp4';
+      return join(vifDir, filename);
     } else {
       // Final mode: timestamped file or named file
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -504,6 +506,15 @@ export class SceneRunner {
       } catch {
         // App doesn't expose targets - that's ok
       }
+
+      // Apply target offset if configured (compensates for coordinate system differences)
+      if (app.targetOffset) {
+        this.targetOffset = {
+          x: app.targetOffset.x || 0,
+          y: app.targetOffset.y || 0
+        };
+        this.log(`📍 Target offset: x=${this.targetOffset.x}, y=${this.targetOffset.y}`);
+      }
     }
 
     // Auto-show camera if presenter is enabled in scene
@@ -575,9 +586,23 @@ export class SceneRunner {
         // First check if target exists directly in appTargets (DemoKit anchors, SDK targets)
         const directTarget = this.appTargets[target];
         if (directTarget && typeof (directTarget as any).x === 'number') {
-          // Click target with coordinates from app
-          this.log(`📍 Using app target: ${target} → (${(directTarget as any).x}, ${(directTarget as any).y})`);
-          await this.send('cursor.moveTo', { x: (directTarget as any).x, y: (directTarget as any).y, duration: 0.3 });
+          // Click target with coordinates from app (apply offset)
+          const clickX = (directTarget as any).x + this.targetOffset.x;
+          const clickY = (directTarget as any).y + this.targetOffset.y;
+          this.log(`📍 Using app target: ${target} → (${clickX}, ${clickY})`);
+
+          // Ensure app is frontmost before clicking
+          if (this.scene.app?.name) {
+            const { execSync } = await import('child_process');
+            try {
+              execSync(`osascript -e 'tell application "${this.scene.app.name}" to activate'`, { stdio: 'ignore' });
+              await this.sleep(100);
+            } catch {
+              // Ignore activation errors
+            }
+          }
+
+          await this.send('cursor.moveTo', { x: clickX, y: clickY, duration: 0.3 });
           await this.sleep(350);
           await this.send('cursor.click');
           await this.validateAction('click', target);

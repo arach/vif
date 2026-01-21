@@ -1,0 +1,24 @@
+# Scenario 02: Recording
+# Tests recording with primitives
+# Prerequisites: Scenario 01 passes
+# Success: Video file created at ~/.vif/scenario-02.mp4
+
+scene:
+  name: "02 - Recording"
+  mode: draft
+  output: scenario-02
+
+sequence:
+  - record: start
+
+  # Reuse primitive patterns
+  - cursor.show: {}
+  - label.show: { text: "Recording test", position: top }
+  - cursor.moveTo: { x: 500, y: 400, duration: 0.5 }
+  - wait: 1s
+  - cursor.click: {}
+  - wait: 500ms
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - record: stop

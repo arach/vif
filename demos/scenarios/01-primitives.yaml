@@ -1,0 +1,28 @@
+# Scenario 01: Primitives
+# Tests basic overlay primitives without app interaction
+# Prerequisites: vif serve running
+# Success: All overlays appear/disappear, no errors
+
+scene:
+  name: "01 - Primitives"
+  mode: draft
+
+sequence:
+  # Test cursor
+  - cursor.show: {}
+  - wait: 500ms
+  - cursor.moveTo: { x: 400, y: 300, duration: 0.3 }
+  - wait: 300ms
+  - cursor.moveTo: { x: 800, y: 500, duration: 0.3 }
+  - wait: 300ms
+  - cursor.hide: {}
+
+  # Test labels
+  - label.show: { text: "Testing labels", position: top }
+  - wait: 1s
+  - label.hide: {}
+
+  # Test backdrop
+  - stage.backdrop: { show: true }
+  - wait: 500ms
+  - stage.backdrop: { show: false }

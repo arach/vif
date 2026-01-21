@@ -1,0 +1,9 @@
+# Minimal recording test
+scene:
+  name: Recording Test
+  mode: draft
+
+sequence:
+  - record: start
+  - wait: 3s
+  - record: stop

@@ -16,7 +16,9 @@
     "build:app-bundle": "mkdir -p 'dist/Vif Agent.app/Contents/MacOS' 'dist/Vif Agent.app/Contents/Resources' && cp dist/vif-agent 'dist/Vif Agent.app/Contents/MacOS/' && cp scripts/Info.plist 'dist/Vif Agent.app/Contents/'",
     "sign:agent": "codesign --force --options runtime --sign 'Apple Development: Arach Tchoupani (D58PF38LQK)' dist/vif-agent && codesign --force --deep --options runtime --sign 'Apple Development: Arach Tchoupani (D58PF38LQK)' 'dist/Vif Agent.app'",
     "dev": "tsc --watch",
-    "test": "node dist/test.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:scenarios": "npx tsx scripts/run-scenarios.ts",
     "postinstall": "node scripts/postinstall.cjs"
   },
   "keywords": [
@@ -34,7 +36,8 @@
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
     "puppeteer": "^24.34.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.17"
   },
   "engines": {
     "node": ">=18"

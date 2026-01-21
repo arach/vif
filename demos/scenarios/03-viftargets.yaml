@@ -1,0 +1,42 @@
+# Scenario 03: VifTargets Integration
+# Tests clicking app targets via VifTargets SDK
+# Prerequisites: Scenario 02 passes, SpeakEasy running with VifTargets
+# Success: Clicks land on correct tabs, video shows navigation
+
+scene:
+  name: "03 - VifTargets"
+  mode: draft
+  output: scenario-03
+
+app:
+  name: SpeakEasy
+  targetOffset:
+    x: 30
+    y: 0
+
+sequence:
+  - record: start
+  - cursor.show: {}
+
+  # Test target resolution
+  - label.show: { text: "Testing VifTargets", position: top }
+  - wait: 1s
+
+  # Click first tab
+  - label.show: { text: "Clicking tab.openai", position: top }
+  - click: tab.openai
+  - wait: 1s
+
+  # Click second tab
+  - label.show: { text: "Clicking tab.hud", position: top }
+  - click: tab.hud
+  - wait: 1s
+
+  # Return to dashboard
+  - label.show: { text: "Clicking tab.dashboard", position: top }
+  - click: tab.dashboard
+  - wait: 1s
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - record: stop

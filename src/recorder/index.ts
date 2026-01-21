@@ -176,15 +176,28 @@ export class Recorder extends EventEmitter {
       });
 
       // Send SIGINT to stop recording gracefully
-      proc.kill('SIGINT');
+      // Use process.kill with PID directly for more reliable signal delivery
+      const pid = proc.pid;
+      if (pid) {
+        try {
+          process.kill(pid, 'SIGINT');
+        } catch {
+          // Process might already be dead
+        }
+      }
 
       // Fallback timeout - screencapture should stop within 2 seconds
       setTimeout(() => {
-        if (!resolved) {
+        if (!resolved && pid) {
           // Force kill if still running
-          if (proc.exitCode === null) {
-            proc.kill('SIGKILL');
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            // Process might already be dead
           }
+          // Give it a moment to die, then cleanup
+          setTimeout(cleanup, 200);
+        } else if (!resolved) {
           cleanup();
         }
       }, 2000);

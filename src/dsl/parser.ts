@@ -29,6 +29,10 @@ export interface App {
     height?: number;
     center?: boolean;
   };
+  targetOffset?: {
+    x?: number;
+    y?: number;
+  };
 }
 
 export interface Stage {
