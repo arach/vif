@@ -1,15 +1,22 @@
 # Scenario 04: Cursor Demo
-# Shows animated cursor movements and clicks with yellow ripple animation
-# Demonstrates vif's cursor overlay capabilities
+# Shows animated cursor movements and clicks with Calculator app
+# Demonstrates precise window positioning and tight viewport framing
 
 scene:
   name: "04 - Cursor Demo"
   mode: draft
   output: demo-cursor
 
+app:
+  name: Calculator
+  window:
+    width: 232
+    height: 462  # Calculator Basic view actual minimum size
+
 stage:
+  backdrop: true
   viewport:
-    padding: 40
+    padding: 8  # Tight frame around Calculator
 
 labels:
   title:
@@ -19,48 +26,80 @@ labels:
     text: "Smooth animation"
     position: top
   clicking:
-    text: "Click ripples"
+    text: "7 + 3 = ?"
     position: top
   done:
-    text: "✨ vif"
-    position: top
+    text: "V"
+    position: bottom
 
 sequence:
-  - record: start
-  - record.indicator: { show: false }
-  - backdrop.show: {}
-  - cursor.show: {}
-
-  - label: title
-  - cursor.moveTo: { x: 500, y: 350, duration: 0.5 }
-  - wait: 800ms
-
-  - label: movement
-  - cursor.moveTo: { x: 800, y: 200, duration: 0.5 }
-  - wait: 300ms
-  - cursor.moveTo: { x: 300, y: 450, duration: 0.4 }
-  - wait: 300ms
-  - cursor.moveTo: { x: 700, y: 400, duration: 0.4 }
+  # Setup - launch Calculator and position it precisely
+  - app.launch: { name: Calculator }
   - wait: 500ms
 
+  # Set a nice subtle dark background (not purple)
+  - backdrop.style: { gradient: "linear-gradient(180deg, #0f0f0f 0%, #1a1a1a 100%)" }
+
+  # Position Calculator at specific screen location (centered)
+  - stage.center: { app: Calculator, width: 232, height: 462 }
+  - wait: 300ms
+
+  - record: start
+  - cursor.show: {}
+
+  # Title
+  - label: title
+  - wait: 600ms
+
+  # Movement demo - move around the calculator (relative to app window)
+  - label: movement
+  - cursor.moveTo: { x: 40, y: 150, duration: 0.3 }
+  - wait: 200ms
+  - cursor.moveTo: { x: 190, y: 280, duration: 0.3 }
+  - wait: 200ms
+  - cursor.moveTo: { x: 116, y: 220, duration: 0.3 }
+  - wait: 400ms
+
+  # Click demo - calculate 7 + 3
+  # macOS Calculator Basic view (232x462):
+  # Display: y=0-100
+  # Row 1 (y~130): AC, ±, %, ÷
+  # Row 2 (y~195): 7, 8, 9, ×
+  # Row 3 (y~260): 4, 5, 6, -
+  # Row 4 (y~325): 1, 2, 3, +
+  # Row 5 (y~390): 0 (wide), ., =
+  # Columns: x=29, 87, 145, 203 (button centers)
   - label: clicking
-  - cursor.moveTo: { x: 450, y: 350, duration: 0.3 }
-  - wait: 200ms
+
+  # Click "7"
+  - cursor.moveTo: { x: 29, y: 195, duration: 0.25 }
+  - wait: 150ms
+  - cursor.click: {}
+  - wait: 300ms
+
+  # Click "+"
+  - cursor.moveTo: { x: 203, y: 325, duration: 0.25 }
+  - wait: 150ms
+  - cursor.click: {}
+  - wait: 300ms
+
+  # Click "3"
+  - cursor.moveTo: { x: 145, y: 325, duration: 0.25 }
+  - wait: 150ms
+  - cursor.click: {}
+  - wait: 300ms
+
+  # Click "="
+  - cursor.moveTo: { x: 203, y: 390, duration: 0.25 }
+  - wait: 150ms
   - cursor.click: {}
   - wait: 600ms
-  - cursor.moveTo: { x: 650, y: 350, duration: 0.3 }
-  - wait: 200ms
-  - cursor.click: {}
-  - wait: 600ms
-  - cursor.moveTo: { x: 550, y: 450, duration: 0.3 }
-  - wait: 200ms
-  - cursor.click: {}
+
+  # Finish
+  - label: done
   - wait: 800ms
 
-  - label: done
-  - wait: 1000ms
-
+  # Cleanup
   - label.hide: {}
   - cursor.hide: {}
-  - backdrop.hide: {}
   - record: stop

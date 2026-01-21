@@ -1,0 +1,132 @@
+# Scenario 06: iTerm + Vim Demo
+# Shows terminal workflow: create file, edit with vim, save, view
+# Demonstrates highlighted typing where each keystroke is visible
+
+scene:
+  name: "06 - iTerm Vim Demo"
+  mode: draft
+  output: demo-iterm-vim
+
+app:
+  name: iTerm2
+  window:
+    width: 900
+    height: 500
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 10
+
+labels:
+  title:
+    text: "Terminal Workflow"
+    position: top
+  create:
+    text: "Create file"
+    position: top
+  editing:
+    text: "Writing content"
+    position: top
+  saving:
+    text: "Save & quit"
+    position: top
+  viewing:
+    text: "View result"
+    position: top
+  done:
+    text: "V"
+    position: bottom
+
+sequence:
+  # Setup - launch iTerm and create new window
+  - app.launch: { name: iTerm }
+  - wait: 1s
+
+  # Create new window and position
+  - input.keys: ["cmd", "n"]
+  - wait: 800ms
+
+  # Set nice dark background
+  - backdrop.style: { gradient: "linear-gradient(180deg, #0a0a0a 0%, #141414 100%)" }
+
+  # Position window (use iTerm2 as process name)
+  - stage.center: { app: iTerm2, width: 900, height: 500, x: 200, y: 150 }
+  - wait: 500ms
+
+  - record: start
+  - cursor.show: {}
+
+  # Title
+  - label: title
+  - wait: 500ms
+
+  # First cd to /tmp for a clean workspace
+  - input.type: { text: "cd /tmp", delay: 0.03 }
+  - input.keys: ["return"]
+  - wait: 400ms
+
+  # Create file with vim
+  - label: create
+  - wait: 300ms
+  - typer.type: { text: "vim demo-typing.md", style: "terminal", delay: 0.05 }
+  - input.type: { text: "vim demo-typing.md", delay: 0.05 }
+  - typer.hide: {}
+  - input.keys: ["return"]
+  - wait: 1s
+
+  # Enter insert mode
+  - label: editing
+  - typer.type: { text: "i", style: "code", delay: 0.1 }
+  - input.type: { text: "i", delay: 0.1 }
+  - typer.hide: {}
+  - wait: 400ms
+
+  # Type the title
+  - typer.type: { text: "# Hello from vif", style: "code", delay: 0.04 }
+  - input.type: { text: "# Hello from vif", delay: 0.04 }
+  - typer.hide: {}
+  - input.keys: ["return"]
+  - wait: 300ms
+
+  # Type empty line and content
+  - input.keys: ["return"]
+  - wait: 200ms
+  - typer.type: { text: "This was created automatically.", style: "code", delay: 0.03 }
+  - input.type: { text: "This was created automatically.", delay: 0.03 }
+  - typer.hide: {}
+  - wait: 500ms
+
+  # Save and quit - the vim ritual
+  - label: saving
+  - wait: 400ms
+
+  # Escape to normal mode
+  - typer.type: { text: "Esc", style: "code", delay: 0.1 }
+  - input.keys: ["escape"]
+  - typer.hide: {}
+  - wait: 300ms
+
+  # :wq to save and quit
+  - typer.type: { text: ":wq", style: "code", delay: 0.08 }
+  - input.type: { text: ":wq", delay: 0.08 }
+  - typer.hide: {}
+  - input.keys: ["return"]
+  - wait: 800ms
+
+  # View the file with cat
+  - label: viewing
+  - typer.type: { text: "cat demo-typing.md", style: "terminal", delay: 0.04 }
+  - input.type: { text: "cat demo-typing.md", delay: 0.04 }
+  - typer.hide: {}
+  - input.keys: ["return"]
+  - wait: 1s
+
+  # Finish with V branding
+  - label: done
+  - wait: 800ms
+
+  # Cleanup
+  - label.hide: {}
+  - cursor.hide: {}
+  - record: stop

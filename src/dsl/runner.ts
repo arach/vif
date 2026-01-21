@@ -936,6 +936,65 @@ export class SceneRunner {
       return;
     }
 
+    // app.launch - launch an application
+    if ('app.launch' in action) {
+      const launchAction = action['app.launch'] as { name: string };
+      const appName = launchAction.name;
+      this.log(`🚀 Launching app: ${appName}`);
+
+      const { execSync } = await import('child_process');
+      try {
+        execSync(`open -a "${appName}"`, { stdio: 'ignore' });
+        // Give app time to launch
+        await this.sleep(1000);
+        // Activate to bring to front
+        execSync(`osascript -e 'tell application "${appName}" to activate'`, { stdio: 'ignore' });
+        await this.sleep(500);
+      } catch (err) {
+        this.log(`⚠️ Failed to launch ${appName}: ${err instanceof Error ? err.message : 'unknown'}`);
+      }
+      return;
+    }
+
+    // backdrop.style - set backdrop background style
+    if ('backdrop.style' in action) {
+      const style = action['backdrop.style'] as { color?: string; gradient?: string; image?: string };
+      this.log(`🎨 Setting backdrop style`);
+      await this.send('stage.render', { type: 'background', ...style });
+      return;
+    }
+
+    // stage.center - position and resize app window
+    if ('stage.center' in action) {
+      const centerAction = action['stage.center'] as { app: string; width?: number; height?: number; x?: number; y?: number };
+      const { app, width = 1200, height = 800, x, y } = centerAction;
+
+      if (x !== undefined && y !== undefined) {
+        this.log(`📐 Positioning app: ${app} at (${x}, ${y}) size ${width}x${height}`);
+      } else {
+        this.log(`📐 Centering app: ${app} (${width}x${height})`);
+      }
+
+      try {
+        const params: Record<string, unknown> = { app, width, height };
+        if (x !== undefined) params.x = x;
+        if (y !== undefined) params.y = y;
+
+        const result = await this.send('stage.center', params) as { bounds?: { x: number; y: number; width: number; height: number } };
+
+        // Store app bounds for coordinate resolution
+        if (result.bounds) {
+          this.appBounds = result.bounds;
+          this.log(`📐 App bounds: x=${result.bounds.x}, y=${result.bounds.y}, ${result.bounds.width}x${result.bounds.height}`);
+        }
+
+        await this.sleep(500);
+      } catch (err) {
+        this.log(`⚠️ stage.center failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      }
+      return;
+    }
+
     // zoom
     if ('zoom' in action) {
       const zoom = (action as any).zoom;

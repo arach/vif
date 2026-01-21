@@ -196,6 +196,22 @@ export interface AudioVolumeAction {
   };
 }
 
+// App launch action
+export interface AppLaunchAction {
+  'app.launch': { name: string };
+}
+
+// Stage center action (can also position with x,y)
+export interface StageCenterAction {
+  'stage.center': {
+    app: string;
+    width?: number;
+    height?: number;
+    x?: number;  // Explicit x position (screen coords)
+    y?: number;  // Explicit y position (screen coords)
+  };
+}
+
 export type Action =
   | CursorShowAction
   | CursorHideAction
@@ -223,7 +239,9 @@ export type Action =
   | CameraHideAction
   | CameraSetAction
   | ZoomAction
-  | ZoomResetAction;
+  | ZoomResetAction
+  | AppLaunchAction
+  | StageCenterAction;
 
 export interface SceneFile {
   scene: Scene;

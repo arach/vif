@@ -1,60 +1,72 @@
 # Scenario 05: Keyboard Demo
-# Shows keyboard shortcut overlays and typing
-# Demonstrates vif's keyboard visualization capabilities
+# Shows keyboard overlays and typing with MacVim
+# Demonstrates vif's keyboard visualization with a modal editor
 
 scene:
   name: "05 - Keyboard Demo"
   mode: draft
   output: demo-keyboard
 
+app:
+  name: MacVim
+  window:
+    width: 500
+    height: 350
+
 stage:
+  backdrop: true
   viewport:
-    padding: 40
+    padding: 8
 
 labels:
   title:
     text: "Keyboard Overlays"
     position: top
-  shortcuts:
-    text: "Shortcut hints"
+  insert:
+    text: "Insert mode"
     position: top
   typing:
     text: "Live typing"
     position: top
   done:
-    text: "✨ vif"
-    position: top
+    text: "V"
+    position: bottom
 
 sequence:
+  # Setup - launch MacVim
+  - app.launch: { name: MacVim }
+  - wait: 1s
+  - backdrop.style: { gradient: "linear-gradient(180deg, #0f0f0f 0%, #1a1a1a 100%)" }
+  - stage.center: { app: MacVim, width: 500, height: 350 }
+  - wait: 500ms
+
   - record: start
-  - record.indicator: { show: false }
-  - backdrop.show: {}
   - cursor.show: {}
 
+  # Title
   - label: title
-  - cursor.moveTo: { x: 500, y: 400, duration: 0.4 }
   - wait: 600ms
 
-  - label: shortcuts
-  - keys.show: { keys: ["cmd", "s"], press: true }
-  - wait: 800ms
-  - keys.hide: {}
-  - wait: 300ms
-
-  - keys.show: { keys: ["cmd", "shift", "p"], press: true }
-  - wait: 800ms
-  - keys.hide: {}
+  # Enter insert mode
+  - label: insert
+  - input.type: { text: "i", delay: 0.1 }
   - wait: 400ms
 
+  # Type some text
   - label: typing
-  - typer.type: { text: "vif demo", style: "terminal", delay: 0.08 }
-  - wait: 1000ms
+  - typer.type: { text: "Hello from vif!", style: "code", delay: 0.06 }
+  - wait: 600ms
   - typer.hide: {}
 
+  # Exit insert mode
+  - input.keys: ["escape"]
+  - wait: 400ms
+
+  # Finish with V branding
   - label: done
   - wait: 800ms
 
+  # Cleanup
   - label.hide: {}
   - cursor.hide: {}
-  - backdrop.hide: {}
   - record: stop

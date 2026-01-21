@@ -1364,7 +1364,7 @@ class BackdropWindow: NSWindow {
 }
 
 /// Center an app window on screen and return the actual bounds
-func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> (success: Bool, bounds: NSRect?, error: String?) {
+func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil, x: CGFloat? = nil, y: CGFloat? = nil) -> (success: Bool, bounds: NSRect?, error: String?) {
     guard let screen = NSScreen.main else { return (false, nil, "No main screen") }
 
     // First activate the app (this doesn't require Accessibility)
@@ -1381,14 +1381,22 @@ func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? 
     // Build the positioning script (requires Accessibility for System Events)
     let script: String
     if let w = width, let h = height {
-        let x = Int((screen.frame.width - w) / 2)
-        let y = Int((screen.frame.height - h) / 2)
+        // Calculate position: use explicit x,y if provided, otherwise center
+        let posX: Int
+        let posY: Int
+        if let explicitX = x, let explicitY = y {
+            posX = Int(explicitX)
+            posY = Int(explicitY)
+        } else {
+            posX = Int((screen.frame.width - w) / 2)
+            posY = Int((screen.frame.height - h) / 2)
+        }
         script = """
         tell application "System Events"
             tell process "\(appName)"
                 set frontmost to true
                 set w to front window
-                set position of w to {\(x), \(y)}
+                set position of w to {\(posX), \(posY)}
                 set size of w to {\(Int(w)), \(Int(h))}
             end tell
         end tell
@@ -3224,14 +3232,16 @@ class VifAgent: NSObject, NSApplicationDelegate {
             let _ = showDesktopIcons()
 
         case "center":
-            // Just center an app window
+            // Center or position an app window
             guard let app = json["app"] as? String else {
                 respond(["ok": false, "error": "stage.center requires app name"])
                 return
             }
             let width = (json["width"] as? NSNumber)?.doubleValue
             let height = (json["height"] as? NSNumber)?.doubleValue
-            let result = centerAppWindow(app, width: width.map { CGFloat($0) }, height: height.map { CGFloat($0) })
+            let x = (json["x"] as? NSNumber)?.doubleValue
+            let y = (json["y"] as? NSNumber)?.doubleValue
+            let result = centerAppWindow(app, width: width.map { CGFloat($0) }, height: height.map { CGFloat($0) }, x: x.map { CGFloat($0) }, y: y.map { CGFloat($0) })
             if let bounds = result.bounds {
                 respond([
                     "ok": true,
