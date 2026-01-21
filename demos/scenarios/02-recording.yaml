@@ -11,13 +11,12 @@ scene:
 sequence:
   - record: start
 
-  # Reuse primitive patterns
   - cursor.show: {}
   - label.show: { text: "Recording test", position: top }
-  - cursor.moveTo: { x: 500, y: 400, duration: 0.5 }
-  - wait: 1s
-  - cursor.click: {}
+  - cursor.moveTo: { x: 500, y: 400, duration: 0.3 }
   - wait: 500ms
+  - cursor.click: {}
+  - wait: 300ms
 
   - label.hide: {}
   - cursor.hide: {}

@@ -13,29 +13,46 @@ app:
   targetOffset:
     x: 30
     y: 0
+  window:
+    width: 900
+    height: 700
+
+stage:
+  viewport:
+    padding: 20
+
+labels:
+  intro:
+    text: "VifTargets SDK"
+    position: top
+  openai:
+    text: "→ tab.openai"
+    position: top
+  hud:
+    text: "→ tab.hud"
+    position: top
+  dashboard:
+    text: "→ tab.dashboard"
+    position: top
 
 sequence:
   - record: start
   - cursor.show: {}
 
-  # Test target resolution
-  - label.show: { text: "Testing VifTargets", position: top }
-  - wait: 1s
+  - label: intro
+  - wait: 500ms
 
-  # Click first tab
-  - label.show: { text: "Clicking tab.openai", position: top }
+  - label: openai
   - click: tab.openai
-  - wait: 1s
+  - wait: 500ms
 
-  # Click second tab
-  - label.show: { text: "Clicking tab.hud", position: top }
+  - label: hud
   - click: tab.hud
-  - wait: 1s
+  - wait: 500ms
 
-  # Return to dashboard
-  - label.show: { text: "Clicking tab.dashboard", position: top }
+  - label: dashboard
   - click: tab.dashboard
-  - wait: 1s
+  - wait: 500ms
 
   - label.hide: {}
   - cursor.hide: {}
