@@ -14,7 +14,7 @@
     "build": "tsc && npm run build:agent",
     "build:agent": "swiftc -O -o dist/vif-agent src/agent/main.swift -framework Cocoa -framework Carbon && npm run build:app-bundle && npm run sign:agent",
     "build:app-bundle": "mkdir -p 'dist/Vif Agent.app/Contents/MacOS' 'dist/Vif Agent.app/Contents/Resources' && cp dist/vif-agent 'dist/Vif Agent.app/Contents/MacOS/' && cp scripts/Info.plist 'dist/Vif Agent.app/Contents/'",
-    "sign:agent": "codesign --force --options runtime --sign 'Apple Development: Arach Tchoupani (D58PF38LQK)' dist/vif-agent && codesign --force --deep --options runtime --sign 'Apple Development: Arach Tchoupani (D58PF38LQK)' 'dist/Vif Agent.app'",
+    "sign:agent": "codesign --force --options runtime --sign '677D4DA3279968901048E353AD8182E17A3C34C2' dist/vif-agent && codesign --force --deep --options runtime --sign '677D4DA3279968901048E353AD8182E17A3C34C2' 'dist/Vif Agent.app'",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -54,19 +54,23 @@ import CoreAudio
 
 // MARK: - Accessibility Check
 
-func checkAccessibility() -> Bool {
+var hasPromptedForAccessibility = false
+
+func checkAccessibility(prompt: Bool = true) -> Bool {
     let trusted = AXIsProcessTrusted()
     if !trusted {
         print("{\"event\":\"permission_required\",\"type\":\"accessibility\"}")
         fflush(stdout)
 
-        // Prompt for access
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-
-        // Wait a moment and check again
-        Thread.sleep(forTimeInterval: 0.5)
-        return AXIsProcessTrusted()
+        // Only prompt once per session to avoid annoying repeated dialogs
+        if prompt && !hasPromptedForAccessibility {
+            hasPromptedForAccessibility = true
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+            Thread.sleep(forTimeInterval: 0.5)
+            return AXIsProcessTrusted()
+        }
+        return false
     }
     return true
 }
@@ -1351,18 +1355,21 @@ class BackdropWindow: NSWindow {
 }
 
 /// Center an app window on screen and return the actual bounds
-func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> (success: Bool, bounds: NSRect?) {
-    guard let screen = NSScreen.main else { return (false, nil) }
+func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? = nil) -> (success: Bool, bounds: NSRect?, error: String?) {
+    guard let screen = NSScreen.main else { return (false, nil, "No main screen") }
 
-    // First activate the app (idempotent - won't launch duplicates)
+    // First activate the app (this doesn't require Accessibility)
     let activateScript = "tell application \"\(appName)\" to activate"
     if let scriptObj = NSAppleScript(source: activateScript) {
         var error: NSDictionary?
         scriptObj.executeAndReturnError(&error)
-        // Small delay to let app come to front
-        Thread.sleep(forTimeInterval: 0.2)
+        if let err = error {
+            fputs("[agent] activate failed: \(err)\n", stderr)
+        }
+        Thread.sleep(forTimeInterval: 0.3)
     }
 
+    // Build the positioning script (requires Accessibility for System Events)
     let script: String
     if let w = width, let h = height {
         let x = Int((screen.frame.width - w) / 2)
@@ -1397,20 +1404,32 @@ func centerAppWindow(_ appName: String, width: CGFloat? = nil, height: CGFloat? 
         """
     }
 
-    var error: NSDictionary?
-    if let scriptObj = NSAppleScript(source: script) {
-        scriptObj.executeAndReturnError(&error)
-        if error == nil {
-            // Calculate the actual bounds based on what we set
-            let actualWidth = width ?? 800
-            let actualHeight = height ?? 600
-            let x = (screen.frame.width - actualWidth) / 2
-            let y = (screen.frame.height - actualHeight) / 2
-            let bounds = NSRect(x: x, y: y, width: actualWidth, height: actualHeight)
-            return (true, bounds)
-        }
+    // Use NSAppleScript (runs in app's context with app's permissions)
+    guard let scriptObj = NSAppleScript(source: script) else {
+        return (false, nil, "Failed to create AppleScript")
     }
-    return (false, nil)
+
+    var errorDict: NSDictionary?
+    scriptObj.executeAndReturnError(&errorDict)
+
+    if let err = errorDict {
+        let errorNum = err[NSAppleScript.errorNumber] as? Int ?? -1
+        let errorMsg = err[NSAppleScript.errorMessage] as? String ?? "Unknown AppleScript error"
+        fputs("[agent] stage.center AppleScript error \(errorNum): \(errorMsg)\n", stderr)
+
+        // Check for Accessibility permission error (-1719)
+        if errorNum == -1719 {
+            return (false, nil, "Vif Agent needs Accessibility permission. Go to System Settings > Privacy & Security > Accessibility and enable 'Vif Agent'")
+        }
+        return (false, nil, errorMsg)
+    }
+
+    let actualWidth = width ?? 800
+    let actualHeight = height ?? 600
+    let x = (screen.frame.width - actualWidth) / 2
+    let y = (screen.frame.height - actualHeight) / 2
+    let bounds = NSRect(x: x, y: y, width: actualWidth, height: actualHeight)
+    return (true, bounds, nil)
 }
 
 // MARK: - Viewport Mask Window
@@ -3214,6 +3233,8 @@ class VifAgent: NSObject, NSApplicationDelegate {
                         "height": Int(bounds.height)
                     ]
                 ])
+            } else if let error = result.error {
+                respond(["ok": false, "error": error])
             } else {
                 respond(["ok": result.success])
             }
