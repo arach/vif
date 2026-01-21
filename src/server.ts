@@ -427,8 +427,11 @@ export class JsonRpcServer {
     const params = this.formatParams(cmd);
     this.log(`← ${action}${params}${id ? ` (id: ${id})` : ''}`);
 
-    // Check if agent is required but not available
-    if (!this.agent && !['ping'].includes(action)) {
+    // Commands that work without the agent (file-based operations)
+    const agentFreeCommands = ['ping', 'videos.', 'sfx.', 'scenes.', 'timeline.', 'shell.'];
+    const needsAgent = !agentFreeCommands.some(c => action === c || action.startsWith(c));
+
+    if (!this.agent && needsAgent) {
       return { id, ok: false, error: 'vif-agent not available' };
     }
 

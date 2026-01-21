@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useRef, useEffect } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import { PageLayout } from '@/components/PageLayout'
 import {
   Card,
   CardContent,
@@ -160,9 +161,10 @@ function Sounds() {
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="space-y-8">
-        {/* Header */}
+    <PageLayout mode="contained">
+      <TooltipProvider delayDuration={300}>
+        <div className="space-y-8">
+          {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold gradient-text">Sound Effects</h1>
@@ -307,7 +309,8 @@ function Sounds() {
             </pre>
           </CardContent>
         </Card>
-      </div>
-    </TooltipProvider>
+        </div>
+      </TooltipProvider>
+    </PageLayout>
   )
 }

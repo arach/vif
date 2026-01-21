@@ -2,6 +2,7 @@ import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import { PageLayout } from '@/components/PageLayout'
 import {
   Card,
   CardContent,
@@ -89,12 +90,13 @@ function PostProduction() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold gradient-text">Post-Production</h1>
-        <p className="text-muted-foreground mt-1">Mix audio tracks and render final output</p>
-      </div>
+    <PageLayout mode="full">
+      <div className="space-y-8">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold gradient-text">Post-Production</h1>
+          <p className="text-muted-foreground mt-1">Mix audio tracks and render final output</p>
+        </div>
 
       {!connected ? (
         <Card variant="glass" className="p-12 text-center">
@@ -307,8 +309,9 @@ function PostProduction() {
             )}
           </div>
         </CardContent>
-      </Card>
-    </div>
+        </Card>
+      </div>
+    </PageLayout>
   )
 }
 

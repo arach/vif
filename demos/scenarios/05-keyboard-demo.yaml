@@ -1,0 +1,60 @@
+# Scenario 05: Keyboard Demo
+# Shows keyboard shortcut overlays and typing
+# Demonstrates vif's keyboard visualization capabilities
+
+scene:
+  name: "05 - Keyboard Demo"
+  mode: draft
+  output: demo-keyboard
+
+stage:
+  viewport:
+    padding: 40
+
+labels:
+  title:
+    text: "Keyboard Overlays"
+    position: top
+  shortcuts:
+    text: "Shortcut hints"
+    position: top
+  typing:
+    text: "Live typing"
+    position: top
+  done:
+    text: "✨ vif"
+    position: top
+
+sequence:
+  - record: start
+  - record.indicator: { show: false }
+  - backdrop.show: {}
+  - cursor.show: {}
+
+  - label: title
+  - cursor.moveTo: { x: 500, y: 400, duration: 0.4 }
+  - wait: 600ms
+
+  - label: shortcuts
+  - keys.show: { keys: ["cmd", "s"], press: true }
+  - wait: 800ms
+  - keys.hide: {}
+  - wait: 300ms
+
+  - keys.show: { keys: ["cmd", "shift", "p"], press: true }
+  - wait: 800ms
+  - keys.hide: {}
+  - wait: 400ms
+
+  - label: typing
+  - typer.type: { text: "vif demo", style: "terminal", delay: 0.08 }
+  - wait: 1000ms
+  - typer.hide: {}
+
+  - label: done
+  - wait: 800ms
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - backdrop.hide: {}
+  - record: stop

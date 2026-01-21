@@ -29,13 +29,21 @@ const SIDEBAR_COLLAPSED_WIDTH = 64
 const SIDEBAR_COLLAPSE_THRESHOLD = 100
 
 // Sidebar context for collapse state
-const SidebarContext = createContext<{
+interface SidebarContextValue {
   collapsed: boolean
   setCollapsed: (collapsed: boolean) => void
   width: number
-}>({ collapsed: false, setCollapsed: () => {}, width: SIDEBAR_DEFAULT_WIDTH })
+  actualWidth: number // The actual rendered width (collapsed or expanded)
+}
 
-const useSidebar = () => useContext(SidebarContext)
+const SidebarContext = createContext<SidebarContextValue>({
+  collapsed: false,
+  setCollapsed: () => {},
+  width: SIDEBAR_DEFAULT_WIDTH,
+  actualWidth: SIDEBAR_DEFAULT_WIDTH,
+})
+
+export const useSidebar = () => useContext(SidebarContext)
 
 function RootLayout() {
   const [connected, setConnected] = useState(false)
@@ -115,10 +123,15 @@ function RootLayout() {
     }
   }, [isResizing])
 
+  const actualWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : width
+
   return (
-    <SidebarContext.Provider value={{ collapsed, setCollapsed, width }}>
+    <SidebarContext.Provider value={{ collapsed, setCollapsed, width, actualWidth }}>
       <TooltipProvider delayDuration={0}>
-        <div className="min-h-screen bg-vif-bg flex">
+        <div
+          className="min-h-screen bg-vif-bg flex"
+          style={{ '--sidebar-width': `${actualWidth}px` } as React.CSSProperties}
+        >
           {/* Subtle ambient gradient */}
           <div className="fixed inset-0 overflow-hidden pointer-events-none">
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-vif-accent/5 rounded-full blur-[120px]" />
@@ -218,11 +231,9 @@ function RootLayout() {
 
           </aside>
 
-          {/* Main content */}
+          {/* Main content - pages control their own layout */}
           <main className="relative flex-1 overflow-auto">
-            <div className="max-w-5xl mx-auto px-8 py-8">
-              <Outlet />
-            </div>
+            <Outlet />
           </main>
         </div>
       </TooltipProvider>

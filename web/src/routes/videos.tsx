@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import { PageLayout } from '@/components/PageLayout'
 import {
   Card,
   Button,
@@ -16,11 +17,7 @@ import {
   FolderOpen,
   Download,
   Trash2,
-  Video,
-  HardDrive,
-  Clock,
   Film,
-  ArrowRight,
   Radio,
 } from 'lucide-react'
 
@@ -85,276 +82,177 @@ function Videos() {
     return date.toLocaleDateString()
   }
 
-  // Calculate total size
-  const totalSize = videos.reduce((sum, v) => sum + v.size, 0)
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold gradient-text">Videos</h1>
-            <p className="text-muted-foreground mt-1">Browse and preview your recorded videos</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <Badge variant="glass" className="mb-1">
-                <Video className="w-3 h-3 mr-1" />
-                {videos.length} video{videos.length !== 1 ? 's' : ''}
-              </Badge>
-              <div className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
-                <HardDrive className="w-3 h-3" />
-                {formatSize(totalSize)} total
-              </div>
-            </div>
-            {videosData?.dir && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="glass"
-                    size="sm"
-                    onClick={() => {
-                      vifClient.send('shell.open', { path: videosData.dir })
-                    }}
-                  >
-                    <FolderOpen className="w-4 h-4 mr-2" />
-                    Open Folder
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{videosData.dir}</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </div>
-
-        {!connected ? (
-          <Card variant="glass" className="p-12 text-center">
-            <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
-            <p className="text-muted-foreground">Connect to vif server to view videos</p>
-          </Card>
-        ) : isLoading ? (
-          <Card variant="glass" className="p-12 text-center">
-            <div className="w-8 h-8 mx-auto mb-3 border-2 border-vif-accent/30 border-t-vif-accent rounded-full animate-spin" />
-            <p className="text-muted-foreground">Loading videos...</p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-5 gap-6">
-            {/* Video List */}
-            <div className="col-span-2 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-2">
-              {videos.map((video) => (
-                <VideoCard
-                  key={video.name}
-                  video={video}
-                  selected={selectedVideo === video.name}
-                  onSelect={() => setSelectedVideo(video.name)}
-                  formatSize={formatSize}
-                  formatDate={formatDate}
-                />
-              ))}
-              {videos.length === 0 && (
-                <Card variant="glass" className="p-8 text-center">
-                  <Film className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
-                  <p className="text-muted-foreground">No videos yet</p>
-                  <p className="text-sm text-muted-foreground/60 mt-1">Run a scene to create your first recording</p>
-                </Card>
-              )}
-            </div>
-
-            {/* Video Player */}
-            <div className="col-span-3">
-              {selectedVideo ? (
-                <Card variant="glass" className="overflow-hidden sticky top-8">
-                  <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Play className="w-4 h-4 text-vif-accent" />
-                      <code className="text-sm font-mono text-neutral-300">{selectedVideo}</code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="glass"
-                            size="sm"
-                            onClick={() => {
-                              const link = document.createElement('a')
-                              link.href = `http://localhost:7852/videos/${encodeURIComponent(selectedVideo)}`
-                              link.download = selectedVideo
-                              link.click()
-                            }}
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            Download
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Download video file</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="glass-danger"
-                            size="sm"
-                            onClick={() => {
-                              if (confirm(`Delete ${selectedVideo}?`)) {
-                                deleteMutation.mutate(selectedVideo)
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete video</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                  <div className="bg-black">
-                    <VideoPlayer videoName={selectedVideo} />
-                  </div>
-                  <div className="px-4 py-3 border-t border-white/[0.06] bg-white/[0.02]">
-                    {(() => {
-                      const video = videos.find(v => v.name === selectedVideo)
-                      if (!video) return null
-                      return (
-                        <div className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-3">
-                            <Badge variant="secondary" className="gap-1">
-                              <HardDrive className="w-3 h-3" />
-                              {formatSize(video.size)}
-                            </Badge>
-                            <span className="text-muted-foreground flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {formatDate(video.modified)}
-                            </span>
-                          </div>
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="text-vif-accent"
-                            onClick={() => {
-                              window.location.href = `/recordings?video=${encodeURIComponent(selectedVideo)}`
-                            }}
-                          >
-                            Open in Post-Production
-                            <ArrowRight className="w-4 h-4 ml-1" />
-                          </Button>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                </Card>
-              ) : (
-                <Card variant="glass" className="p-12 text-center sticky top-8">
-                  <Film className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
-                  <p className="text-muted-foreground">Select a video to preview</p>
-                  <p className="text-xs text-muted-foreground/60 mt-2">Videos are stored in ~/.vif</p>
-                </Card>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </TooltipProvider>
-  )
-}
-
-function VideoCard({
-  video,
-  selected,
-  onSelect,
-  formatSize,
-  formatDate,
-}: {
-  video: VideoFile
-  selected: boolean
-  onSelect: () => void
-  formatSize: (bytes: number) => string
-  formatDate: (iso: string) => string
-}) {
-  const isDraft = video.name === 'draft.mp4'
-  const isFinal = video.name.includes('final')
-
-  return (
-    <Card
-      variant={selected ? "glass" : "glass-interactive"}
-      onClick={onSelect}
-      className={`p-4 cursor-pointer ${
-        selected
-          ? 'border-vif-accent/50 shadow-glow-sm bg-gradient-to-br from-vif-accent/10 to-transparent'
-          : ''
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        {/* Thumbnail placeholder */}
-        <div className="w-16 h-10 rounded bg-neutral-800 flex items-center justify-center flex-shrink-0 border border-white/[0.06]">
-          <Play className="w-4 h-4 text-muted-foreground" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-medium truncate flex items-center gap-2">
-            {video.name.replace('.mp4', '')}
-            {isDraft && (
-              <Badge variant="glass-warning" className="text-[10px] py-0">
-                Draft
-              </Badge>
-            )}
-            {isFinal && !isDraft && (
-              <Badge variant="glass-success" className="text-[10px] py-0">
-                Final
-              </Badge>
-            )}
-          </h3>
-          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <HardDrive className="w-3 h-3" />
-              {formatSize(video.size)}
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {formatDate(video.modified)}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function VideoPlayer({ videoName }: { videoName: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [error, setError] = useState(false)
-
+  // Auto-select first video if none selected
   useEffect(() => {
-    setError(false)
-    if (videoRef.current) {
-      videoRef.current.load()
+    if (videos.length > 0 && !selectedVideo) {
+      setSelectedVideo(videos[0].name)
     }
-  }, [videoName])
+  }, [videos, selectedVideo])
 
-  const videoUrl = `http://localhost:7852/videos/${encodeURIComponent(videoName)}`
-
-  if (error) {
+  if (!connected) {
     return (
-      <div className="aspect-video flex items-center justify-center bg-neutral-900">
-        <div className="text-center">
-          <Video className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
-          <p className="text-muted-foreground">Failed to load video</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Check if the HTTP server is running on port 7852</p>
-        </div>
-      </div>
+      <PageLayout mode="contained">
+        <Card variant="glass" className="p-12 text-center">
+          <Radio className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+          <p className="text-muted-foreground">Connect to vif server to view videos</p>
+        </Card>
+      </PageLayout>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <PageLayout mode="contained">
+        <Card variant="glass" className="p-12 text-center">
+          <div className="w-8 h-8 mx-auto mb-3 border-2 border-vif-accent/30 border-t-vif-accent rounded-full animate-spin" />
+          <p className="text-muted-foreground">Loading videos...</p>
+        </Card>
+      </PageLayout>
     )
   }
 
   return (
-    <video
-      ref={videoRef}
-      className="w-full aspect-video"
-      controls
-      autoPlay
-      onError={() => setError(true)}
-    >
-      <source src={videoUrl} type="video/mp4" />
-      Your browser does not support video playback.
-    </video>
+    <PageLayout mode="immersive">
+      <TooltipProvider delayDuration={300}>
+        <div className="flex h-full">
+          {/* Video list sidebar */}
+          <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900/30 flex flex-col">
+            {/* List header */}
+            <div className="p-3 border-b border-zinc-800/50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-zinc-300">
+                  {videos.length} video{videos.length !== 1 ? 's' : ''}
+                </span>
+                {videosData?.dir && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => vifClient.send('shell.open', { path: videosData.dir })}
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open folder</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            </div>
+
+            {/* Video list */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {videos.map((video) => {
+                const isSelected = selectedVideo === video.name
+                const isDraft = video.name === 'draft.mp4'
+                return (
+                  <button
+                    key={video.name}
+                    onClick={() => setSelectedVideo(video.name)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                      isSelected
+                        ? 'bg-vif-accent/20 text-white'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Play className={`w-3 h-3 flex-shrink-0 ${isSelected ? 'text-vif-accent' : ''}`} />
+                      <span className="truncate">{video.name.replace('.mp4', '')}</span>
+                      {isDraft && (
+                        <Badge variant="glass-warning" className="text-[9px] py-0 px-1 ml-auto">
+                          Draft
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5 pl-5">
+                      {formatSize(video.size)} • {formatDate(video.modified)}
+                    </div>
+                  </button>
+                )
+              })}
+              {videos.length === 0 && (
+                <div className="p-4 text-center text-zinc-500 text-sm">
+                  <Film className="w-6 h-6 mx-auto mb-2 opacity-40" />
+                  No videos yet
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Player area */}
+          <div className="flex-1 flex flex-col bg-black">
+            {selectedVideo ? (
+              <>
+                {/* Video player */}
+                <div className="flex-1 flex items-center justify-center">
+                  <video
+                    key={selectedVideo}
+                    className="max-w-full max-h-full"
+                    controls
+                    autoPlay
+                  >
+                    <source
+                      src={`http://localhost:7852/videos/${encodeURIComponent(selectedVideo)}`}
+                      type="video/mp4"
+                    />
+                  </video>
+                </div>
+
+                {/* Bottom toolbar */}
+                <div className="flex-shrink-0 px-4 py-3 bg-zinc-900/80 border-t border-zinc-800 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <code className="text-sm font-mono text-zinc-300">{selectedVideo}</code>
+                    {(() => {
+                      const video = videos.find(v => v.name === selectedVideo)
+                      if (!video) return null
+                      return (
+                        <span className="text-xs text-zinc-500">
+                          {formatSize(video.size)} • {formatDate(video.modified)}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const link = document.createElement('a')
+                        link.href = `http://localhost:7852/videos/${encodeURIComponent(selectedVideo)}`
+                        link.download = selectedVideo
+                        link.click()
+                      }}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      onClick={() => {
+                        if (confirm(`Delete ${selectedVideo}?`)) {
+                          deleteMutation.mutate(selectedVideo)
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center text-zinc-500">
+                  <Film className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p>Select a video to preview</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </TooltipProvider>
+    </PageLayout>
   )
 }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { vifClient } from '@/lib/vif-client'
 import { useEffect, useState, useRef } from 'react'
 import { TimelineOverlay } from '@/components/TimelineOverlay'
+import { PageLayout } from '@/components/PageLayout'
 import { Button, TooltipProvider } from '@/components/ui'
 import {
   Play,
@@ -86,9 +87,10 @@ function Dashboard() {
   const [showControls, setShowControls] = useState(false)
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="space-y-6">
-        {/* Compact Header with Status */}
+    <PageLayout mode="contained">
+      <TooltipProvider delayDuration={300}>
+        <div className="space-y-6">
+          {/* Compact Header with Status */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-white">vif</h1>
@@ -202,8 +204,9 @@ function Dashboard() {
             </div>
           )}
         </div>
-      </div>
-    </TooltipProvider>
+        </div>
+      </TooltipProvider>
+    </PageLayout>
   )
 }
 

@@ -1,0 +1,66 @@
+# Scenario 04: Cursor Demo
+# Shows animated cursor movements and clicks with yellow ripple animation
+# Demonstrates vif's cursor overlay capabilities
+
+scene:
+  name: "04 - Cursor Demo"
+  mode: draft
+  output: demo-cursor
+
+stage:
+  viewport:
+    padding: 40
+
+labels:
+  title:
+    text: "Cursor Overlay"
+    position: top
+  movement:
+    text: "Smooth animation"
+    position: top
+  clicking:
+    text: "Click ripples"
+    position: top
+  done:
+    text: "✨ vif"
+    position: top
+
+sequence:
+  - record: start
+  - record.indicator: { show: false }
+  - backdrop.show: {}
+  - cursor.show: {}
+
+  - label: title
+  - cursor.moveTo: { x: 500, y: 350, duration: 0.5 }
+  - wait: 800ms
+
+  - label: movement
+  - cursor.moveTo: { x: 800, y: 200, duration: 0.5 }
+  - wait: 300ms
+  - cursor.moveTo: { x: 300, y: 450, duration: 0.4 }
+  - wait: 300ms
+  - cursor.moveTo: { x: 700, y: 400, duration: 0.4 }
+  - wait: 500ms
+
+  - label: clicking
+  - cursor.moveTo: { x: 450, y: 350, duration: 0.3 }
+  - wait: 200ms
+  - cursor.click: {}
+  - wait: 600ms
+  - cursor.moveTo: { x: 650, y: 350, duration: 0.3 }
+  - wait: 200ms
+  - cursor.click: {}
+  - wait: 600ms
+  - cursor.moveTo: { x: 550, y: 450, duration: 0.3 }
+  - wait: 200ms
+  - cursor.click: {}
+  - wait: 800ms
+
+  - label: done
+  - wait: 1000ms
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - backdrop.hide: {}
+  - record: stop

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { vifClient } from '@/lib/vif-client'
+import { PageLayout } from '@/components/PageLayout'
 import { Timeline } from '@/components/Timeline'
 import { TimelineOverlay } from '@/components/TimelineOverlay'
 import { SceneDiff } from '@/components/SceneDiff'
@@ -129,11 +130,12 @@ function Scenes() {
   const scenes = scenesData?.scenes || []
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold gradient-text">Scenes</h1>
+    <PageLayout mode="full">
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">Scenes</h1>
           <p className="text-muted-foreground mt-1">Browse and run your automation scenes</p>
         </div>
         <div className="flex items-center gap-3">
@@ -331,8 +333,9 @@ function Scenes() {
             )}
           </div>
         </div>
-      )}
-    </div>
+        )}
+      </div>
+    </PageLayout>
   )
 }
 
