@@ -12,6 +12,117 @@ import { executeDemo, saveDemoRecording, hasCursorControl, toCursorTrack } from 
 import { startServer } from './server.js';
 import { runScene, SceneParser } from './dsl/index.js';
 import { Recorder, recordDuration } from './recorder/index.js';
+import { spawn } from 'child_process';
+import WebSocket from 'ws';
+/**
+ * Check server/agent status
+ */
+async function checkServerStatus() {
+    const port = 7850;
+    return new Promise((resolve) => {
+        const ws = new WebSocket(`ws://localhost:${port}`);
+        let agentReady = false;
+        const cleanup = () => {
+            ws.removeAllListeners();
+            ws.close();
+        };
+        const timeout = setTimeout(() => {
+            cleanup();
+            resolve({ connected: false, agentReady: false });
+        }, 3000);
+        ws.on('open', () => {
+            ws.on('message', (data) => {
+                try {
+                    const msg = JSON.parse(data.toString());
+                    if (msg.event === 'ready') {
+                        agentReady = msg.agent === true;
+                        clearTimeout(timeout);
+                        cleanup();
+                        resolve({ connected: true, agentReady });
+                    }
+                }
+                catch { }
+            });
+        });
+        ws.on('error', () => {
+            clearTimeout(timeout);
+            cleanup();
+            resolve({ connected: false, agentReady: false });
+        });
+    });
+}
+/**
+ * Start the vif server in background
+ */
+async function startServerBackground(verbose = false) {
+    const log = verbose ? console.log.bind(console) : () => { };
+    // Check if already running
+    const status = await checkServerStatus();
+    if (status.connected && status.agentReady) {
+        log('[vif] Server already running with agent');
+        return;
+    }
+    if (status.connected) {
+        log('[vif] Server running, waiting for agent...');
+    }
+    else {
+        log('[vif] Starting server...');
+        // Start server as detached background process
+        const serverProcess = spawn('node', ['dist/cli.js', 'serve'], {
+            cwd: process.cwd(),
+            detached: true,
+            stdio: 'ignore',
+        });
+        serverProcess.unref();
+    }
+    // Wait for server + agent to be ready
+    const timeout = 15000;
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+        await new Promise(r => setTimeout(r, 500));
+        const status = await checkServerStatus();
+        if (status.connected && status.agentReady) {
+            log('[vif] Server ready with agent');
+            return;
+        }
+        if (status.connected) {
+            log('[vif] Waiting for agent...');
+        }
+    }
+    // Check final status
+    const finalStatus = await checkServerStatus();
+    if (finalStatus.connected) {
+        console.warn('[vif] Warning: Agent not ready, some features may not work');
+        return;
+    }
+    throw new Error('Timeout waiting for server to start');
+}
+/**
+ * Stop the vif server and agent
+ */
+async function stopServer(verbose = false) {
+    const log = verbose ? console.log.bind(console) : () => { };
+    log('[vif] Stopping server and agent...');
+    // Kill any running server processes
+    try {
+        execSync('pkill -f "node.*dist/cli.*serve" 2>/dev/null || true', { stdio: 'ignore' });
+    }
+    catch { }
+    // Kill the agent
+    try {
+        execSync('pkill -f "vif-agent" 2>/dev/null || true', { stdio: 'ignore' });
+        execSync('pkill -f "Vif Agent" 2>/dev/null || true', { stdio: 'ignore' });
+    }
+    catch { }
+    // Clean up socket
+    try {
+        execSync('rm -f /tmp/vif-agent.sock', { stdio: 'ignore' });
+    }
+    catch { }
+    // Give processes time to die
+    await new Promise(r => setTimeout(r, 500));
+    log('[vif] Stopped');
+}
 const args = process.argv.slice(2);
 const command = args[0];
 function printHelp() {
@@ -37,9 +148,10 @@ Processing Commands:
   mix <video> <audio> <out>    Add audio track to video
 
 Scene Commands (Declarative DSL):
-  play <scene.yaml>            Run a declarative scene file
+  play <scene.yaml>            Run scene (auto-starts/stops server)
+  play --keep <scene.yaml>     Run scene, keep server running after
   play --validate <scene.yaml> Validate without running
-  play --watch <scene.yaml>    Re-run on file changes
+  play --watch <scene.yaml>    Watch mode (re-run on changes)
 
 Storyboard Commands:
   render <storyboard.yaml>     Render a storyboard to video
@@ -62,8 +174,10 @@ Cache Commands:
   cache clear                  Clear the asset cache
 
 Server Commands:
-  serve                        Start automation server (ws://localhost:7850)
-  serve --port <n>             Start on custom port
+  up                           Start server + agent (if not running)
+  down                         Stop server + agent
+  status                       Show server/agent status
+  serve                        Start server in foreground (manual mode)
 
 Take Management:
   take new <asset> [note]      Create a new take/version
@@ -766,11 +880,46 @@ async function main() {
             }
             break;
         }
+        case 'up': {
+            // Start server + agent in background
+            const verbose = opts.verbose === true || opts.v === true;
+            try {
+                await startServerBackground(verbose);
+                const status = await checkServerStatus();
+                console.log('✓ vif server running');
+                console.log(`  Server: ${status.connected ? 'connected' : 'disconnected'}`);
+                console.log(`  Agent:  ${status.agentReady ? 'ready' : 'not ready'}`);
+            }
+            catch (err) {
+                console.error(`Error: ${err.message}`);
+                process.exit(1);
+            }
+            break;
+        }
+        case 'down': {
+            // Stop server + agent
+            const verbose = opts.verbose === true || opts.v === true;
+            await stopServer(verbose);
+            console.log('✓ vif server stopped');
+            break;
+        }
+        case 'status': {
+            // Show current status
+            const status = await checkServerStatus();
+            if (status.connected) {
+                console.log('✓ vif server running');
+                console.log(`  Agent: ${status.agentReady ? 'ready' : 'not ready'}`);
+            }
+            else {
+                console.log('○ vif server not running');
+            }
+            break;
+        }
         case 'serve': {
             const port = opts.port ? parseInt(opts.port, 10) : 7850;
             const verbose = opts.verbose === true || opts.v === true;
-            console.log('vif automation server');
-            console.log('=====================');
+            console.log('vif automation server (foreground mode)');
+            console.log('========================================');
             console.log(`Protocol: WebSocket JSON-RPC`);
             console.log(`Endpoint: ws://localhost:${port}`);
             console.log('');
@@ -804,14 +953,15 @@ async function main() {
         case 'play': {
             const sceneFile = opts._positional;
             if (!sceneFile) {
-                console.error('Usage: vif play <scene.yaml> [--verbose] [--validate] [--watch]');
+                console.error('Usage: vif play <scene.yaml> [--verbose] [--validate] [--watch] [--keep]');
                 process.exit(1);
             }
             const verbose = opts.verbose === true || opts.v === true;
             const validate = opts.validate === true;
             const watch = opts.watch === true;
+            const keep = opts.keep === true; // Keep server running after demo
             if (validate) {
-                // Validate only - parse and report
+                // Validate only - parse and report (no server needed)
                 console.log(`Validating: ${sceneFile}`);
                 try {
                     const parser = new SceneParser();
@@ -828,8 +978,9 @@ async function main() {
                 break;
             }
             if (watch) {
-                // Watch mode - re-run on file changes
+                // Watch mode - keeps server running (implied --keep)
                 const { watch: watchFile } = await import('fs');
+                await startServerBackground(verbose);
                 console.log(`Watching: ${sceneFile}`);
                 console.log('Press Ctrl+C to stop.\n');
                 const runOnce = async () => {
@@ -840,6 +991,12 @@ async function main() {
                         console.error(`Error: ${err.message}`);
                     }
                 };
+                // Clean up on exit
+                process.on('SIGINT', async () => {
+                    console.log('\n[vif] Stopping...');
+                    await stopServer(verbose);
+                    process.exit(0);
+                });
                 // Initial run
                 await runOnce();
                 // Watch for changes
@@ -852,15 +1009,22 @@ async function main() {
                 await new Promise(() => { }); // Keep alive
                 break;
             }
-            // Normal run
+            // Normal run - start clean, run, clean up (unless --keep)
+            let exitCode = 0;
             try {
+                await startServerBackground(verbose);
                 await runScene(sceneFile, { verbose });
             }
             catch (err) {
                 console.error(`Error: ${err.message}`);
-                process.exit(1);
+                exitCode = 1;
             }
-            break;
+            finally {
+                if (!keep) {
+                    await stopServer(verbose);
+                }
+            }
+            process.exit(exitCode);
         }
         case 'slide': {
             const templateOrSubcmd = opts._positional;

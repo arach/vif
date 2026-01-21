@@ -183,12 +183,20 @@ class CursorView: NSView {
         let tipX: CGFloat = 0
         let tipY: CGFloat = 0
 
-        // Ripple effect at cursor tip
+        // Ripple effect at cursor tip - two rings for more visible click
         if showRipple && ripplePhase > 0 {
-            let size: CGFloat = 50 * ripplePhase
-            let rect = CGRect(x: tipX - size/2, y: tipY - size/2, width: size, height: size)
-            ctx.setFillColor(NSColor.systemBlue.withAlphaComponent(0.5 * (1.0 - ripplePhase)).cgColor)
-            ctx.fillEllipse(in: rect)
+            // Inner solid ring
+            let innerSize: CGFloat = 40 * ripplePhase
+            let innerRect = CGRect(x: tipX - innerSize/2, y: tipY - innerSize/2, width: innerSize, height: innerSize)
+            ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(0.6 * (1.0 - ripplePhase)).cgColor)
+            ctx.fillEllipse(in: innerRect)
+
+            // Outer expanding ring
+            let outerSize: CGFloat = 70 * ripplePhase
+            let outerRect = CGRect(x: tipX - outerSize/2, y: tipY - outerSize/2, width: outerSize, height: outerSize)
+            ctx.setStrokeColor(NSColor.systemYellow.withAlphaComponent(0.8 * (1.0 - ripplePhase)).cgColor)
+            ctx.setLineWidth(3)
+            ctx.strokeEllipse(in: outerRect)
         }
 
         // Drag indicator at cursor tip
@@ -239,14 +247,15 @@ class CursorView: NSView {
 
     func animateClick() {
         showRipple = true
-        ripplePhase = 0.1
-        for i in 1...15 {
+        ripplePhase = 0.15
+        // 20 frames over 500ms for smoother, more visible animation
+        for i in 1...20 {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.025) {
-                self.ripplePhase = CGFloat(i) / 15.0
+                self.ripplePhase = CGFloat(i) / 20.0
                 self.needsDisplay = true
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
             self.showRipple = false
             self.ripplePhase = 0
             self.needsDisplay = true
