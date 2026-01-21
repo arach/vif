@@ -1,4 +1,5 @@
 import HeroSection from "@/components/hero-section"
+import DemosSection from "@/components/demos-section"
 import FeaturesSection from "@/components/features-section"
 import ExamplesSection from "@/components/examples-section"
 import QuickStartSection from "@/components/quick-start-section"
@@ -10,6 +11,7 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       <HeroSection />
+      <DemosSection />
       <FeaturesSection />
       <AgentSection />
       <ExamplesSection />
