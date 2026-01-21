@@ -1,0 +1,9 @@
+# Minimal test scene
+scene:
+  name: Minimal Test
+  mode: draft
+
+sequence:
+  - cursor.show: {}
+  - wait: 1s
+  - cursor.hide: {}

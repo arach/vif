@@ -440,14 +440,18 @@ export class SceneRunner {
       const width = app.window?.width || 1200;
       const height = app.window?.height || 800;
 
-      const centerResult = await this.send('stage.center', {
-        app: app.name,
-        width,
-        height,
-      }) as { bounds?: { x: number; y: number; width: number; height: number } };
-
-      // Wait for window to settle after centering
-      await this.sleep(500);
+      let centerResult: { bounds?: { x: number; y: number; width: number; height: number } } = {};
+      try {
+        centerResult = await this.send('stage.center', {
+          app: app.name,
+          width,
+          height,
+        }) as { bounds?: { x: number; y: number; width: number; height: number } };
+        // Wait for window to settle after centering
+        await this.sleep(500);
+      } catch (err) {
+        this.log(`⚠️ stage.center failed (continuing anyway): ${err instanceof Error ? err.message : 'unknown'}`);
+      }
 
       // Store app bounds for coordinate resolution
       // Use actual bounds from stage.center if available, otherwise calculate

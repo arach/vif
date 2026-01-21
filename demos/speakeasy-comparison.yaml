@@ -1,0 +1,182 @@
+# SpeakEasy Demo - Coordinate vs SDK Comparison
+#
+# A meta-demo that shows:
+#   Act 1: The fragile coordinate approach
+#   Act 2: The robust SDK approach
+#   Act 3: Code walkthrough (camera on presenter)
+#
+# Run: vif play demos/speakeasy-comparison.yaml
+
+scene:
+  name: VifTargets SDK Demo
+  mode: draft
+  presenter:
+    enabled: true
+    position: bottom-right
+    size: medium
+
+app:
+  name: SpeakEasy
+  window:
+    width: 900
+    height: 700
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 20
+
+labels:
+  title:
+    text: "Demo Automation: Coordinates vs SDK"
+    position: top
+
+  # Act 1 labels
+  act1-intro:
+    text: "Act 1: The Coordinate Approach"
+    position: top
+
+  act1-problem:
+    text: "Hardcoded coordinates: click at (170, 75)"
+    position: top
+
+  act1-fragile:
+    text: "Problem: These break when the UI changes"
+    position: top
+
+  # Act 2 labels
+  act2-intro:
+    text: "Act 2: The VifTargets SDK Approach"
+    position: top
+
+  act2-semantic:
+    text: "Semantic targets: click tab.openai"
+    position: top
+
+  act2-resolved:
+    text: "Coordinates resolved at runtime via HTTP"
+    position: top
+
+  act2-robust:
+    text: "Resize or move the window - still works!"
+    position: top
+
+  # Act 3 labels
+  act3-intro:
+    text: "Act 3: How It Works"
+    position: top
+
+  act3-code:
+    text: "Add .vifTarget(\"name\") to any SwiftUI view"
+    position: top
+
+  act3-server:
+    text: "SDK runs HTTP server on port 7851"
+    position: top
+
+  act3-query:
+    text: "vif queries /vif/targets for coordinates"
+    position: top
+
+  outro:
+    text: "VifTargets: Semantic Demo Automation"
+    position: top
+
+sequence:
+  - wait: 500ms
+  - record: start
+
+  # Title
+  - cursor.show: {}
+  - label: title
+  - wait: 2s
+
+  # =========================================
+  # ACT 1: The Coordinate Approach (fragile)
+  # =========================================
+
+  - label: act1-intro
+  - wait: 2s
+
+  - label: act1-problem
+  # Using hardcoded coordinates
+  - cursor.moveTo: { x: 170, y: 75, duration: 0.5 }
+  - wait: 500ms
+  - cursor.click: {}
+  - wait: 1s
+
+  - label: act1-fragile
+  - wait: 2s
+
+  # =========================================
+  # ACT 2: The SDK Approach (robust)
+  # =========================================
+
+  - label: act2-intro
+  - wait: 2s
+
+  - label: act2-semantic
+  # Using semantic target - vif queries VifTargets SDK
+  - click: tab.hud
+  - wait: 1s
+
+  - label: act2-resolved
+  - wait: 1.5s
+
+  # Demo the HUD test button with semantic target
+  - click: btn.hud-test
+  - wait: 2s
+
+  - label: act2-robust
+  - wait: 2s
+
+  # Go back to OpenAI to show more targets
+  - click: tab.openai
+  - wait: 800ms
+  - click: btn.openai-play
+  - wait: 2s
+
+  # =========================================
+  # ACT 3: How It Works (code walkthrough)
+  # =========================================
+
+  - label: act3-intro
+  - camera.set: { position: bottom-left, size: large }
+  - wait: 2s
+
+  - label: act3-code
+  - typer.type:
+      text: ".vifTarget(\"btn.submit\")"
+      style: code
+      delay: 0.05
+  - wait: 2s
+  - typer.hide: {}
+
+  - label: act3-server
+  - typer.type:
+      text: "VifTargets.shared.start()"
+      style: code
+      delay: 0.05
+  - wait: 2s
+  - typer.hide: {}
+
+  - label: act3-query
+  - typer.type:
+      text: "GET /vif/targets → {\"btn.submit\": {\"x\": 500, \"y\": 300}}"
+      style: terminal
+      delay: 0.03
+  - wait: 2s
+  - typer.hide: {}
+
+  # =========================================
+  # Outro
+  # =========================================
+
+  - label: outro
+  - camera.set: { position: bottom-right, size: medium }
+  - wait: 3s
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - camera.hide: {}
+  - record: stop

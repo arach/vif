@@ -1,0 +1,107 @@
+# SpeakEasy Demo - SDK Mode (The Robust Way)
+#
+# This demo uses VifTargets SDK for semantic targets.
+# Targets are resolved at runtime - works even if window moves!
+#
+# Prerequisites:
+#   1. SpeakEasy built with VifTargets integration
+#   2. SpeakEasy running (it starts VifTargets server on port 7851)
+#
+# Run: vif play demos/speakeasy-sdk.yaml
+
+scene:
+  name: SpeakEasy Demo (SDK)
+  mode: draft
+  presenter:
+    enabled: true
+    position: bottom-right
+    size: medium
+
+app:
+  name: SpeakEasy
+  window:
+    width: 900
+    height: 700
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 20
+
+labels:
+  intro:
+    text: "SpeakEasy Demo - Using VifTargets SDK"
+    position: top
+
+  sdk:
+    text: "Targets are resolved at runtime via HTTP"
+    position: top
+
+  openai:
+    text: "Click tab.openai - resolved to live coordinates"
+    position: top
+
+  play:
+    text: "Click btn.openai-play - button found dynamically"
+    position: top
+
+  hud:
+    text: "Navigate to HUD settings..."
+    position: top
+
+  test:
+    text: "Test the HUD overlay"
+    position: top
+
+  robust:
+    text: "Move the window - it still works!"
+    position: top
+
+  outro:
+    text: "VifTargets: Semantic automation for macOS apps"
+    position: top
+
+sequence:
+  - wait: 500ms
+  - record: start
+
+  # Intro with presenter camera
+  - cursor.show: {}
+  - label: intro
+  - wait: 2s
+
+  - label: sdk
+  - wait: 2s
+
+  # Navigate to OpenAI using semantic target
+  - label: openai
+  - click: tab.openai
+  - wait: 1s
+
+  # Click play button using semantic target
+  - label: play
+  - click: btn.openai-play
+  - wait: 2s
+
+  # Navigate to HUD tab
+  - label: hud
+  - click: tab.hud
+  - wait: 1s
+
+  # Click Test HUD button
+  - label: test
+  - click: btn.hud-test
+  - wait: 2s
+
+  # Show robustness message
+  - label: robust
+  - wait: 2s
+
+  # Outro
+  - label: outro
+  - wait: 2s
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - camera.hide: {}
+  - record: stop

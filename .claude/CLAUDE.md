@@ -14,6 +14,10 @@ vif serve
 vif-ctl cursor show
 vif-ctl cursor move 500 300 0.5
 vif-ctl camera show --position bottom-right --size 150
+
+# 4. Start the dashboard (optional, for visual editing)
+cd web && pnpm dev
+# Opens at http://localhost:5180
 ```
 
 ## Architecture Overview
@@ -26,6 +30,16 @@ vif-ctl camera show --position bottom-right --size 150
 │  (dist/cli.js)  │  (dist/ctl.js)  │  (dist/mcp/server.js)   │
 │  Main CLI       │  Control CLI    │  MCP Server             │
 └────────┬────────┴────────┬────────┴────────┬────────────────┘
+         │                 │                  │
+         │                 │                  │
+┌────────┴────────────────┴──────────────────┴────────────────┐
+│              vif-dashboard (React/Vite)                      │
+│                   web/ → http://localhost:5180               │
+│  - Scene editor with live preview                            │
+│  - Sound library management                                  │
+│  - Video browser and post-production                         │
+│  - Real-time connection status                               │
+└─────────────────────────────────────────────────────────────┘
          │                 │                  │
          │  serve          │  commands        │  MCP tools
          ▼                 ▼                  ▼
@@ -54,6 +68,7 @@ vif-ctl camera show --position bottom-right --size 150
 |------|----|----------|-----------|
 | vif-ctl | Server | WebSocket | ws://localhost:7850 |
 | MCP | Server | WebSocket | ws://localhost:7850 |
+| Dashboard | Server | WebSocket | ws://localhost:7850 |
 | Server | Agent | Unix Socket | /tmp/vif-agent.sock |
 | Server | HTTP clients | HTTP | http://localhost:7852 |
 
@@ -69,6 +84,9 @@ vif-ctl camera show --position bottom-right --size 150
 | `src/mcp/server.ts` | MCP server for Claude Code |
 | `src/dsl/parser.ts` | Scene YAML parser |
 | `src/dsl/runner.ts` | Scene executor |
+| `web/` | Dashboard (React/Vite app) |
+| `web/src/routes/` | Dashboard pages (scenes, sounds, videos, post-production) |
+| `web/src/lib/vif-client.ts` | WebSocket client for dashboard |
 
 ## Startup Flow
 
@@ -158,6 +176,25 @@ sequence:
 
 | Port | Service |
 |------|---------|
+| 5180 | Dashboard (vif-dashboard) |
 | 7850 | WebSocket server (main) |
 | 7851 | VifTargets SDK (apps) |
 | 7852 | HTTP video streaming |
+
+## Dashboard
+
+The vif dashboard (`web/`) provides a visual interface for managing demos:
+
+```bash
+cd web && pnpm dev
+# Opens at http://localhost:5180
+```
+
+**Features:**
+- **Dashboard** - Overview and connection status
+- **Scenes** - Edit scene YAML files with syntax highlighting and live preview
+- **Sounds** - Browse and manage the sound library for demos
+- **Videos** - View recorded videos and manage outputs
+- **Post-Production** - Timeline editor, scene diffs, and finishing tools
+
+The dashboard connects to the vif server via WebSocket (port 7850) and shows real-time connection status in the sidebar.

@@ -1,0 +1,60 @@
+# SpeakEasy Demo - Simple (no stage.center)
+#
+# This demo works without stage.center by using backdrop only.
+# SpeakEasy must already be running and visible.
+#
+# Run: vif play demos/speakeasy-simple.yaml
+
+scene:
+  name: SpeakEasy Demo
+  mode: draft
+
+app:
+  name: SpeakEasy
+
+stage:
+  backdrop: true
+
+labels:
+  intro:
+    text: "SpeakEasy with VifTargets SDK"
+    position: top
+
+  click-openai:
+    text: "Clicking tab.openai..."
+    position: top
+
+  click-hud:
+    text: "Clicking tab.hud..."
+    position: top
+
+  done:
+    text: "Demo complete!"
+    position: top
+
+sequence:
+  - wait: 500ms
+  - record: start
+
+  # Show cursor and intro
+  - cursor.show: {}
+  - label: intro
+  - wait: 2s
+
+  # Click OpenAI tab using VifTargets
+  - label: click-openai
+  - click: tab.openai
+  - wait: 1.5s
+
+  # Click HUD tab
+  - label: click-hud
+  - click: tab.hud
+  - wait: 1.5s
+
+  # Done
+  - label: done
+  - wait: 2s
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - record: stop

@@ -1,0 +1,104 @@
+# SpeakEasy Demo - Coordinate Mode (The Fragile Way)
+#
+# This demo uses hardcoded screen coordinates.
+# It works, but breaks if the window moves or UI changes.
+#
+# Run: vif play demos/speakeasy-coordinates.yaml
+
+scene:
+  name: SpeakEasy Demo (Coordinates)
+  mode: draft
+
+app:
+  name: SpeakEasy
+  window:
+    width: 900
+    height: 700
+
+stage:
+  backdrop: true
+  viewport:
+    padding: 20
+
+# Hardcoded coordinates - these WILL break if the window layout changes!
+views:
+  tabs:
+    region: { y: 75 }
+    positions:
+      dashboard: { x: 85 }
+      openai: { x: 170 }
+      elevenlabs: { x: 270 }
+      system: { x: 360 }
+      cache: { x: 430 }
+      hud: { x: 495 }
+      history: { x: 565 }
+
+  content:
+    positions:
+      play-button: { x: 80, y: 450 }
+      hud-test: { x: 280, y: 280 }
+      hud-preview: { x: 120, y: 280 }
+
+labels:
+  intro:
+    text: "SpeakEasy Demo - Using Hardcoded Coordinates"
+    position: top
+
+  warning:
+    text: "These coordinates will break if the window moves!"
+    position: top
+
+  openai:
+    text: "Testing OpenAI voice synthesis..."
+    position: top
+
+  hud:
+    text: "Testing the HUD overlay..."
+    position: top
+
+  fragile:
+    text: "This approach is fragile. There's a better way..."
+    position: top
+
+sequence:
+  - wait: 500ms
+  - record: start
+
+  # Show intro
+  - cursor.show: {}
+  - label: intro
+  - wait: 2s
+
+  # Navigate to OpenAI tab using coordinates
+  - label: openai
+  - cursor.moveTo: { x: 170, y: 75, duration: 0.4 }
+  - wait: 300ms
+  - cursor.click: {}
+  - wait: 800ms
+
+  # Click the Play button (hardcoded position)
+  - cursor.moveTo: { x: 80, y: 450, duration: 0.3 }
+  - wait: 200ms
+  - cursor.click: {}
+  - wait: 2s
+
+  # Navigate to HUD tab
+  - label: hud
+  - cursor.moveTo: { x: 495, y: 75, duration: 0.4 }
+  - wait: 300ms
+  - cursor.click: {}
+  - wait: 800ms
+
+  # Click Test HUD button (hardcoded)
+  - cursor.moveTo: { x: 280, y: 280, duration: 0.3 }
+  - wait: 200ms
+  - cursor.click: {}
+  - wait: 2s
+
+  # Warning message
+  - label: fragile
+  - wait: 2s
+
+  - label.hide: {}
+  - cursor.hide: {}
+  - record: stop

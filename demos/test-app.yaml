@@ -1,0 +1,15 @@
+# Test app configuration
+scene:
+  name: App Test
+  mode: draft
+
+app:
+  name: SpeakEasy
+  window:
+    width: 900
+    height: 700
+
+sequence:
+  - cursor.show: {}
+  - wait: 1s
+  - cursor.hide: {}

@@ -45,12 +45,21 @@ Built for AI agents and LLMs. Declarative scenes, CLI-native, MCP-ready.
 │  - Control panel UI                                          │
 │  - Requires Accessibility + Screen Recording permissions     │
 └─────────────────────────────────────────────────────────────┘
+                             ▲
+                             │ WebSocket
+┌─────────────────────────────────────────────────────────────┐
+│              vif-dashboard (http://localhost:5180)           │
+│  - Scene editor with live preview                            │
+│  - Sound library management                                  │
+│  - Video browser and post-production tools                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Ports
 
 | Port | Service |
 |------|---------|
+| 5180 | Dashboard (visual editing UI) |
 | 7850 | WebSocket server (main commands) |
 | 7851 | VifTargets SDK (app integrations) |
 | 7852 | HTTP video streaming |
@@ -417,6 +426,24 @@ vif serve
 - Check System Settings > Privacy > Accessibility for "Vif Agent"
 - Try pressing Escape to clear and re-show
 
+## Dashboard
+
+The vif dashboard provides a visual interface for managing demos, editing scenes, and post-production.
+
+```bash
+cd web && pnpm dev
+# Opens at http://localhost:5180
+```
+
+**Features:**
+- **Dashboard** — Overview with real-time server connection status
+- **Scenes** — Edit scene YAML files with syntax highlighting and live preview
+- **Sounds** — Browse and manage the sound library for demos
+- **Videos** — View recorded videos and manage outputs
+- **Post-Production** — Timeline editor, scene diffs, and finishing tools
+
+The dashboard connects to the vif server via WebSocket and shows connection status in the sidebar. Make sure `vif serve` is running for full functionality.
+
 ## Development
 
 ```bash
@@ -437,6 +464,9 @@ vif serve
 # In another terminal, test commands
 vif-ctl cursor show
 vif-ctl cursor move 500 300 0.5
+
+# Start the dashboard (optional)
+cd web && pnpm dev
 ```
 
 ### Components
@@ -447,6 +477,7 @@ vif-ctl cursor move 500 300 0.5
 | **Server** | `src/server.ts` | WebSocket server routing commands to agent |
 | **Agent Client** | `src/agent-client.ts` | TypeScript client for Swift agent |
 | **Swift Agent** | `src/agent/main.swift` | macOS app for overlays, recording, control panel |
+| **Dashboard** | `web/` | Visual UI for scene editing, sounds, post-production |
 | **MCP Server** | `src/mcp/server.ts`, `src/mcp/tools/` | Claude Code integration via MCP |
 | **Scene DSL** | `src/dsl/parser.ts`, `src/dsl/runner.ts` | YAML scene parsing and execution |
 | **Browser** | `src/browser.ts`, `src/cdp/` | Chrome automation via CDP |

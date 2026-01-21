@@ -24,5 +24,7 @@
     <true/>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Vif Agent needs camera access to show presenter overlay during demo recordings.</string>
 </dict>
 </plist>
