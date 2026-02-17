@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter, Fraunces } from "next/font/google"
 import "./globals.css"
+import { GoogleAnalytics } from "@/components/GoogleAnalytics"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -67,7 +68,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${sfProDisplay.variable} ${sfProText.variable} ${fraunces.variable}`}>
-      <body className="font-text antialiased">{children}</body>
+      <body className="font-text antialiased">
+        {children}
+        <GoogleAnalytics />
+      </body>
     </html>
   )
 }
